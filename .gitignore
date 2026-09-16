@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.env.local
+.venv/
+node_modules/
+.wrangler/
+dist/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.py[cod]
+coverage.xml
+htmlcov/

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="자연어 퀀트 전략을 WorldQuant BRAIN FASTEXPR과 전체 시뮬레이션 설정으로 변환합니다."
+    />
+    <title>BRAIN Alpha Harness</title>
+    <link rel="stylesheet" href="/app.css" />
+    <script src="/js/app.js" type="module"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="BRAIN Alpha Harness 홈">
+        <span class="brand-mark" aria-hidden="true">α</span>
+        <span>
+          <b>BRAIN Alpha Harness</b>
+          <small>Natural language → verified FASTEXPR</small>
+        </span>
+      </a>
+      <span class="status-chip"><i aria-hidden="true"></i> 검증형 컴파일러</span>
+    </header>
+
+    <main class="workspace">
+      <section class="composer" aria-labelledby="composer-title">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">STRATEGY INPUT</p>
+            <h1 id="composer-title">전략을 자연어로 적으세요</h1>
+          </div>
+          <span class="step-badge">1 / 2</span>
+        </div>
+
+        <form id="strategy-form">
+          <label for="strategy">자연어 전략</label>
+          <textarea id="strategy" name="strategy" maxlength="2000" required>최근 5일 동안 가격이 많이 떨어진 종목을 매수하고 싶다. 거래량이 최근 20일 평균보다 1.5배 이상일 때만 거래하고 산업별로 중립화한다.</textarea>
+          <div class="textarea-meta">
+            <span>기간·방향·조건·중립화를 구체적으로 적을수록 정확합니다.</span>
+            <span id="char-count">0 / 2,000</span>
+          </div>
+
+          <details class="settings-panel">
+            <summary>
+              <span>
+                <b>시뮬레이션 설정 직접 지정</b>
+                <small>비워 두면 표준 설정을 자동 적용합니다.</small>
+              </span>
+              <span aria-hidden="true">＋</span>
+            </summary>
+            <div class="settings-form">
+              <label>Region
+                <select name="region">
+                  <option value="">기본값 · USA</option>
+                  <option value="USA">USA</option>
+                </select>
+              </label>
+              <label>Universe
+                <select name="universe">
+                  <option value="">기본값 · TOP3000</option>
+                  <option>TOP3000</option><option>TOP2000</option><option>TOP1000</option>
+                  <option>TOP500</option><option>TOP200</option>
+                </select>
+              </label>
+              <label>Delay
+                <select name="delay">
+                  <option value="">기본값 · 1</option><option value="1">1</option><option value="0">0</option>
+                </select>
+              </label>
+              <label>Neutralization
+                <select name="neutralization">
+                  <option value="">기본값 · SUBINDUSTRY</option>
+                  <option>SUBINDUSTRY</option><option>INDUSTRY</option><option>SECTOR</option>
+                  <option>MARKET</option><option>NONE</option>
+                </select>
+              </label>
+              <label>Decay
+                <input name="decay" type="number" min="0" max="100" placeholder="기본값 · 4" />
+              </label>
+              <label>Truncation
+                <input name="truncation" type="number" min="0" max="1" step="0.01" placeholder="기본값 · 0.08" />
+              </label>
+            </div>
+          </details>
+
+          <div class="submit-row">
+            <p><b>하루 20회</b>까지 사용할 수 있습니다.</p>
+            <button id="submit-button" type="submit">
+              <span>전략 변환하기</span><span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </form>
+
+        <aside class="privacy-note">
+          <b>BRAIN 계정정보를 입력하지 마세요.</b>
+          <span>이 서비스는 표현식과 설정만 만들며 로그인·시뮬레이션·제출을 수행하지 않습니다.</span>
+        </aside>
+      </section>
+
+      <section class="result" aria-labelledby="result-title" aria-live="polite">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">COMPILED OUTPUT</p>
+            <h2 id="result-title">검증 결과</h2>
+          </div>
+          <span id="result-status" class="result-status waiting">대기</span>
+        </div>
+
+        <div id="result-empty" class="empty-state">
+          <span class="empty-symbol" aria-hidden="true">{ }</span>
+          <h3>전략을 입력하면 여기에 결과가 표시됩니다</h3>
+          <p>FASTEXPR, 전체 시뮬레이션 설정, 합의 신뢰도와 경고를 함께 확인할 수 있습니다.</p>
+        </div>
+
+        <div id="result-loading" class="loading-state" hidden>
+          <div class="loader" aria-hidden="true"></div>
+          <div><b>6개 semantic agent가 전략을 해석하고 있습니다</b><span>합의와 컴파일 검증까지 최대 40초 정도 걸릴 수 있습니다.</span></div>
+        </div>
+
+        <div id="result-content" hidden>
+          <article class="expression-card">
+            <div class="card-label"><span>FINAL FAST EXPRESSION</span><button class="copy-button" data-copy-target="expression-output" type="button">복사</button></div>
+            <code id="expression-output"></code>
+          </article>
+
+          <div class="metrics">
+            <div><small>STATUS</small><b id="metric-status">—</b></div>
+            <div><small>CONSENSUS</small><b id="metric-confidence">—</b></div>
+            <div><small>SETTINGS</small><b>12 / 12</b></div>
+          </div>
+
+          <div class="result-block">
+            <div class="block-head"><h3>Simulation Settings</h3><span>기본값과 사용자 지정을 구분합니다</span></div>
+            <div id="settings-grid" class="settings-grid"></div>
+          </div>
+
+          <div class="result-block">
+            <div class="block-head"><h3>Validation</h3><span>모든 단계를 통과한 코드만 표시합니다</span></div>
+            <ul id="validation-list" class="validation-list"></ul>
+          </div>
+
+          <div id="warnings-block" class="warning-block" hidden>
+            <h3>확인할 내용</h3>
+            <ul id="warnings-list"></ul>
+          </div>
+        </div>
+
+        <div id="result-error" class="error-state" hidden>
+          <span aria-hidden="true">!</span><div><b>변환을 완료하지 못했습니다</b><p id="error-message"></p></div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Q-Lab Research Tool</span>
+      <span>성과를 보장하지 않습니다. BRAIN에서 직접 Simulate해 검증하세요.</span>
+    </footer>
+  </body>
+</html>

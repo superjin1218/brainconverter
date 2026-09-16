@@ -1,0 +1,15 @@
+{
+  "name": "brain-alpha-harness-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260916.1",
+    "typescript": "^5.7.2",
+    "wrangler": "^4.0.0"
+  }
+}
