@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from backend.app.provider import MUSE_MODEL, MuseSparkProvider, build_provider
+from backend.app.provider import META_MUSE_MODEL, MUSE_MODEL, MuseSparkProvider, build_provider
 from backend.app.provider_errors import ProviderError
 from backend.tests.test_provider import FAKE_KEY, reply
 
@@ -11,6 +11,8 @@ from backend.tests.test_provider import FAKE_KEY, reply
 @pytest.fixture(autouse=True)
 def muse_model(monkeypatch):
     monkeypatch.setenv("MUSE_MODEL", MUSE_MODEL)
+    monkeypatch.delenv("MUSE_API_PROVIDER", raising=False)
+    monkeypatch.delenv("META_API_KEY", raising=False)
 
 
 async def test_fixed_muse_model_meta_only_structured_output_and_single_request():
@@ -36,8 +38,12 @@ async def test_fixed_muse_model_meta_only_structured_output_and_single_request()
     assert result.cost_microusd == 126
 
 
+@pytest.mark.parametrize("api_provider", ["gateway", "meta"])
 @pytest.mark.parametrize("status", [400, 401, 402, 403, 429, 500, 503])
-async def test_muse_never_automatically_retries_a_failed_request(status):
+async def test_muse_never_automatically_retries_a_failed_request(
+    status, api_provider, monkeypatch
+):
+    monkeypatch.setenv("MUSE_API_PROVIDER", api_provider)
     calls = []
 
     def handler(_):
@@ -52,6 +58,49 @@ async def test_muse_never_automatically_retries_a_failed_request(status):
     assert FAKE_KEY not in str(error.value)
     if status == 402:
         assert error.value.code == "credits"
+
+
+async def test_meta_direct_uses_only_contributor_and_meta_endpoint(monkeypatch):
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    calls = []
+
+    def handler(request):
+        assert str(request.url) == "https://api.meta.ai/v1/chat/completions"
+        assert request.headers["authorization"] == f"Bearer {FAKE_KEY}"
+        data = json.loads(request.content)
+        assert data["model"] == META_MUSE_MODEL
+        assert data["max_completion_tokens"] == 1024
+        assert data["reasoning_effort"] == "minimal"
+        assert data["response_format"]["json_schema"]["strict"] is True
+        assert "providerOptions" not in data
+        calls.append(request)
+        return httpx.Response(200, json={**reply(), "model": META_MUSE_MODEL})
+
+    result = await MuseSparkProvider(httpx.MockTransport(handler), api_key=FAKE_KEY).interpret(
+        "rules", "최근 5일 하락 종목"
+    )
+    assert len(calls) == 1
+    assert result.cost_microusd == 126
+
+
+def test_meta_credentials_do_not_fall_back_to_gateway_or_oidc(monkeypatch):
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "fake-gateway-only")
+    monkeypatch.setenv("VERCEL_OIDC_TOKEN", "fake-vercel-only")
+    monkeypatch.delenv("AI_API_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="Meta API"):
+        MuseSparkProvider()
+    monkeypatch.setenv("AI_API_KEY", FAKE_KEY)
+    assert MuseSparkProvider().api_key == FAKE_KEY
+    monkeypatch.setenv("META_API_KEY", "fake-meta-preferred")
+    assert MuseSparkProvider().api_key == "fake-meta-preferred"
+
+
+@pytest.mark.parametrize("api_provider", ["https://untrusted.example", "openrouter", ""])
+def test_arbitrary_provider_destinations_are_rejected(monkeypatch, api_provider):
+    monkeypatch.setenv("MUSE_API_PROVIDER", api_provider)
+    with pytest.raises(RuntimeError, match="MUSE_API_PROVIDER"):
+        MuseSparkProvider(api_key=FAKE_KEY)
 
 
 async def test_gateway_cannot_silently_return_a_different_model():

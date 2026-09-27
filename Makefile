@@ -2,16 +2,17 @@
 
 install:
 	python3 -m venv .venv
+	.venv/bin/python -m pip install --upgrade 'pip>=26.2,<27'
 	.venv/bin/pip install -r requirements-dev.txt
 
 dev:
-	APP_ENV=development AUTH_MODE=supabase HARNESS_PROVIDER=mock APP_PUBLIC_URL=http://127.0.0.1:8080 .venv/bin/uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8080 $(if $(wildcard .env.local),--env-file .env.local)
+	APP_ENV=development AUTH_MODE=supabase HARNESS_PROVIDER=mock APP_PUBLIC_URL=http://127.0.0.1:8080 .venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app --host 127.0.0.1 --port 8080 $(if $(wildcard .env.local),--env-file .env.local)
 
 dev-mock:
-	APP_ENV=development AUTH_MODE=none HARNESS_PROVIDER=mock .venv/bin/uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8080
+	APP_ENV=development AUTH_MODE=none HARNESS_PROVIDER=mock .venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app --host 127.0.0.1 --port 8080
 
 dev-ai:
-	APP_ENV=development AUTH_MODE=supabase HARNESS_PROVIDER=muse APP_PUBLIC_URL=http://127.0.0.1:8080 .venv/bin/uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8080 --env-file .env.local
+	APP_ENV=development AUTH_MODE=supabase HARNESS_PROVIDER=muse APP_PUBLIC_URL=http://127.0.0.1:8080 .venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app --host 127.0.0.1 --port 8080 --env-file .env.local
 
 test:
 	.venv/bin/pytest -q

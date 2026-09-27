@@ -17,6 +17,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+      - run: python -m pip install --upgrade 'pip>=26.2,<27'
       - run: pip install -r requirements-dev.txt
       - run: ruff check backend
       - run: docker pull postgres:16-alpine

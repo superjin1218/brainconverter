@@ -1,6 +1,14 @@
 # 현재 구현 상태
 
-## 2026-09-27 최신 · 로컬 실제 AI 연결 확인
+## 2026-09-27 최신 · Meta 직접 연결 및 실제 변환 성공
+
+- Meta 발급 키를 Vercel Gateway로 보내던 연결 불일치를 수정했습니다. `MUSE_API_PROVIDER=meta`는 고정 Meta 공식 주소와 `muse-spark-1.3-contributor`만 사용합니다. 모델·연결 방식 자동 전환 및 자동 재시도는 없습니다.
+- 로컬 `.env.local`의 Meta 키와 서버 Secret으로 실제 관리자 로그인·변환을 확인했습니다. 단순 하락 순위는 `rank(-ts_delta(close, 5))`, 거래량 조건은 `trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 5)), -1)`로 생성됐고 중립화 `INDUSTRY`가 적용됐습니다. BRAIN Simulate는 실행하지 않았습니다.
+- Python·임시 PostgreSQL **293개**, 기존 프런트 상태 **23개**, Ruff·의존성 호환 검사가 통과했습니다. `pip`·`pytest`를 알려진 취약점 수정 버전으로 올렸고 설치 환경의 `pip-audit` 재검사 결과 알려진 취약점 없음입니다. 실제 취약점 무존재를 보장하는 표현은 아닙니다.
+- Vercel Production에 `MUSE_API_PROVIDER=meta`를 저장했습니다. 기존 Secret `AI_API_KEY`를 사용하며 승인 전 배포와 자동 배포는 보류합니다.
+- **남은 작업:** 일반 회원의 인증 메일용 Custom SMTP, 배포 직전 승인, 공개 배포 후 가입·승인·변환 점검. 자동 심층 보안 검사는 관리형 파일 권한 프로필을 만들 수 없는 Codex 실행 환경 때문에 시작되지 않았습니다.
+
+## 2026-09-27 이전 · 로컬 실제 AI 연결 확인
 
 - 로컬 `.env.local`에 Supabase 서버 Secret과 AI 키를 설정하고 `make dev-ai`로 재시작했습니다. 파일은 Git에서 제외되며 권한은 `0600`입니다. Supabase 서버 키의 읽기 전용 인증 확인은 HTTP 200입니다.
 - Chrome에서 승인된 관리자 계정으로 간단한 전략 1건을 실제 Vercel AI Gateway에 요청했습니다. 공급자 인증 실패(401)로 종료됐으며 자동 재시도·모델 전환은 없었습니다. 앱은 원문 오류·키를 표시하지 않고 안전한 인증 오류만 표시했습니다.

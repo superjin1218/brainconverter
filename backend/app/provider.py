@@ -27,12 +27,25 @@ class ProviderResult:
 CONVERSION_RESERVE_MICROUSD = 100_000
 MAX_COMPLETION_TOKENS = 1024
 MUSE_MODEL = "meta/muse-spark-1.3-contributor"
+META_MUSE_MODEL = "muse-spark-1.3-contributor"
 MUSE_RESERVE_MICROUSD = 2000
+
+
+def muse_api_provider() -> str:
+    provider = os.getenv("MUSE_API_PROVIDER", "gateway").strip().lower()
+    if provider not in {"gateway", "meta"}:
+        raise RuntimeError("MUSE_API_PROVIDER는 gateway 또는 meta여야 합니다.")
+    return provider
 
 
 def muse_api_key() -> str:
     """Resolve server credentials without exposing them to the browser."""
-    for name in ("AI_GATEWAY_API_KEY", "AI_API_KEY", "VERCEL_OIDC_TOKEN"):
+    names = (
+        ("META_API_KEY", "AI_API_KEY")
+        if muse_api_provider() == "meta"
+        else ("AI_GATEWAY_API_KEY", "AI_API_KEY", "VERCEL_OIDC_TOKEN")
+    )
+    for name in names:
         value = os.getenv(name, "").strip()
         if value:
             return value
@@ -186,13 +199,21 @@ class MuseSparkProvider(OpenAIChatProvider):
     def __init__(
         self, transport: httpx.AsyncBaseTransport | None = None, *, api_key: str | None = None
     ) -> None:
+        self.api_provider = muse_api_provider()
         key = api_key if api_key is not None else muse_api_key()
         if not key.strip():
-            raise RuntimeError("Vercel AI Gateway API 키가 필요합니다.")
+            raise RuntimeError(
+                "Meta API 키가 필요합니다."
+                if self.api_provider == "meta"
+                else "Vercel AI Gateway API 키가 필요합니다."
+            )
         self.api_key = key.strip()
         self.model = os.getenv("MUSE_MODEL", MUSE_MODEL)
         if self.model != MUSE_MODEL:
             raise RuntimeError("Muse Spark 1.3 Contributor만 사용할 수 있습니다.")
+        if self.api_provider == "meta":
+            self.endpoint = "https://api.meta.ai/v1/chat/completions"
+            self.model = META_MUSE_MODEL
         self.timeout = min(float(os.getenv("MODEL_TIMEOUT_SECONDS", "35")), 35)
         self.transport = transport
 
@@ -201,6 +222,8 @@ class MuseSparkProvider(OpenAIChatProvider):
         return (inputs + 9) // 10 + (outputs + 4) // 5
 
     def routing_options(self) -> dict:
+        if self.api_provider == "meta":
+            return {}
         return {"providerOptions": {"gateway": {"only": ["meta"]}}}
 
     def validate_response_model(self, data: dict) -> None:

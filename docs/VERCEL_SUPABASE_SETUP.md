@@ -1,6 +1,6 @@
 # Vercel + Supabase 회원 사이트 설정
 
-2026-09-27 기준. **실제 Supabase DB·가입 설정과 Vercel Production 서버 Secret 저장까지 완료했습니다. 배포·실제 Muse 호출은 아직 하지 않았습니다.** 아래는 현재 변경을 운영에 연결하는 순서입니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
+2026-09-27 기준. **Supabase DB·운영자 로그인과 Meta Contributor 실제 변환 2건을 확인했습니다. Vercel Production에 Meta 직접 연결 설정을 저장했으며 배포는 운영자 승인 대기입니다.** 일반 회원용 Custom SMTP와 배포 후 확인이 남았습니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
 
 ## 1. Supabase DB 적용
 
@@ -50,6 +50,7 @@ Supabase Authentication에서:
 | APP_ENV | production |
 | AUTH_MODE | supabase |
 | HARNESS_PROVIDER | muse |
+| MUSE_API_PROVIDER | meta |
 | MUSE_MODEL | meta/muse-spark-1.3-contributor |
 | MAX_CONCURRENT_JOBS | 20 |
 | MODEL_TIMEOUT_SECONDS | 35 |
@@ -57,23 +58,25 @@ Supabase Authentication에서:
 | SUPABASE_URL | https://sogpsiheygdwmhdlizvy.supabase.co |
 | SUPABASE_PUBLISHABLE_KEY | 해당 Supabase 프로젝트 공개 키 |
 | SUPABASE_SECRET_KEY | 해당 프로젝트 서버 Secret, 비밀 변수 |
-| AI_GATEWAY_API_KEY 또는 AI_API_KEY | Vercel AI Gateway 키, 비밀 변수 |
+| META_API_KEY 또는 AI_API_KEY | Meta 직접 발급 키, 비밀 변수 |
 
 Chrome에서 `MAX_CONCURRENT_JOBS=20`을 Production·Preview에 저장했습니다. 환경변수는 다음 배포부터 적용됩니다.
 
 Chrome에서 `HARNESS_PROVIDER=muse`, `MUSE_MODEL=meta/muse-spark-1.3-contributor`, timeout 35를 Production·Preview에 저장했습니다. `AUTH_MODE=supabase`와 `APP_PUBLIC_URL`은 Production에 저장했습니다. 미사용 OpenAI 모델 변수는 Muse 변수로 변경했고 OpenAI 키를 등록하지 않았습니다. Preview의 실제 계정 테스트에는 별도 URL·Supabase 설정을 지정하세요. 로컬 설정 창의 키는 Vercel로 자동 이전되지 않습니다. 서버 Secret은 인증·한도 DB 함수에 사용하는 권한이므로 공개 키와 구분하고 브라우저 코드에 넣지 않습니다.
 
-기존 Supabase 서버 키를 `SUPABASE_SECRET_KEY`라는 **Secret 유형·Production 전용** 변수로 저장했고 Vercel 성공 알림을 확인했습니다. 키를 새로 생성·회전하지 않았으며 로컬 파일에는 저장하지 않았습니다.
+기존 Supabase 서버 키를 `SUPABASE_SECRET_KEY`라는 **Secret 유형·Production 전용** 변수로 저장했고 Vercel 성공 알림을 확인했습니다. 로컬 시험에도 기존 키를 Git에서 제외된 `.env.local`에 저장했습니다. 키를 새로 생성·회전하지 않았습니다.
 
-Vercel 배포에서는 자동 제공되는 `VERCEL_OIDC_TOKEN`으로 AI Gateway에 인증할 수도 있으므로 `AI_GATEWAY_API_KEY`가 반드시 필요한 것은 아닙니다. 프로그램은 `AI_GATEWAY_API_KEY` → `AI_API_KEY` → `VERCEL_OIDC_TOKEN` 순서로 사용합니다. 사용자가 저장한 Production Secret 이름 `AI_API_KEY`를 인식하도록 수정했습니다. 키 저장은 확인했지만 발급처·권한·실제 호출 성공은 아직 검증하지 않았습니다. 수정 코드와 환경변수는 다음 배포부터 적용되며 로컬에는 별도 설정해야 합니다. OIDC를 실제 배포에서 확인하거나 별도 Gateway 키를 준비하고, 모델 사용 권한·크레딧을 확인해야 합니다. 로컬 실사용에는 Gateway 키가 필요합니다. [Vercel OIDC 안내](https://vercel.com/docs/ai-gateway/authentication-and-byok/oidc).
+현재 사용자의 키는 Meta 직접 발급 키입니다. Vercel Production의 `MUSE_API_PROVIDER=meta`를 저장했고 기존 Secret 이름 `AI_API_KEY`를 그대로 사용합니다. 로컬에서는 `META_API_KEY`에 저장한 키로 성공했습니다. Meta 모드는 `META_API_KEY` → `AI_API_KEY`만 읽고 `https://api.meta.ai/v1/chat/completions`에 고정 연결합니다. 모델 식별자는 같은 Contributor 모델의 Meta 표기인 `muse-spark-1.3-contributor`로 전송합니다. 수정 코드와 환경변수는 승인 후 배포부터 적용됩니다. [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions).
 
-Muse 요청은 Gateway에서 Meta 제공자만 허용하며 모델·제공자 자동 전환이 없습니다. Contributor 학습 활용 조건에 동의한 변환만 호출합니다. [Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions).
+Vercel AI Gateway를 따로 선택하려면 `MUSE_API_PROVIDER=gateway`와 Vercel 발급 키를 설정합니다. 이 모드의 키 우선순위는 `AI_GATEWAY_API_KEY` → `AI_API_KEY` → `VERCEL_OIDC_TOKEN`입니다. OIDC는 Meta 직접 인증에 사용할 수 없습니다. [Vercel OIDC 안내](https://vercel.com/docs/ai-gateway/authentication-and-byok/oidc).
+
+두 연결 방식 모두 Contributor 모델만 허용하며 모델·제공자 자동 전환이 없습니다. Contributor 학습 활용 조건에 동의한 변환만 호출합니다. Gateway를 선택한 경우에도 제공자는 Meta만 허용합니다. [Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions).
 
 ## 5. 배포 및 확인
 
 현재 **Ignored Build Step: Don’t build anything (`exit 0`)**이며 실제 배포가 없습니다. 저장소의 `vercel.json`에도 `git.deploymentEnabled=false`를 설정하여 모든 브랜치의 Git 자동 배포를 차단합니다. GitHub 코드 저장과 웹사이트 배포는 별개이며 배포 허용 전까지 두 중지 설정을 유지합니다. [Vercel Git 배포 설정](https://vercel.com/docs/project-configuration/git-configuration#turning-off-all-automatic-deployments).
 
-배포할 때 환경변수·SMTP·DB를 모두 완료한 후 `git.deploymentEnabled`를 `true`로 변경하고 자동 빌드 중지 설정을 해제한 뒤 최초 배포합니다. 가입→인증→승인 대기→운영자 승인→단순 전략 한 번 변환→이용 중지 차단을 확인합니다. 실제 유료 변환은 새 모델 키와 크레딧을 준비한 후 한 건부터 확인합니다. BRAIN Simulate는 사용자가 별도로 실행합니다.
+환경변수·SMTP·DB와 검증 결과를 확인한 후 **배포 직전에 운영자 승인을 받습니다.** 승인 후에만 자동 빌드 중지 설정을 해제하고 최초 배포합니다. 향후 자동 배포를 원할 때 `git.deploymentEnabled`를 `true`로 변경하며, 수동 배포 승인과 향후 자동 배포 허용은 별개입니다. 가입→인증→승인 대기→운영자 승인→단순 전략 한 번 변환→이용 중지 차단을 확인합니다. BRAIN Simulate는 사용자가 별도로 실행합니다.
 
 ## 월 비용과 상시 운영
 

@@ -75,7 +75,9 @@ def local_provider_router(application: FastAPI) -> APIRouter:
             raise HTTPException(status_code=400, detail="키 입력 형식을 확인하세요.") from None
         key = payload.get("apiKey") if isinstance(payload, dict) else None
         if not isinstance(key, str) or not re.fullmatch(r"[A-Za-z0-9_.=-]{16,1024}", key.strip()):
-            raise HTTPException(status_code=400, detail="올바른 Vercel AI Gateway 키를 입력하세요.")
+            raise HTTPException(
+                status_code=400, detail="설정한 AI 서비스의 올바른 키를 입력하세요."
+            )
         require_idle()
         try:
             service = HarnessService(MuseSparkProvider(api_key=key.strip()))
