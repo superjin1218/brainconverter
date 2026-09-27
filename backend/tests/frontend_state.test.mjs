@@ -28,6 +28,8 @@ class Element {
   focus() {}
   showModal() { this.open = true; }
   close() { this.open = false; }
+  reset() {}
+  querySelector(selector) { return globalThis.document.querySelector(selector); }
 }
 
 let instance = 0;
@@ -50,9 +52,11 @@ async function dashboard(t, state = realState, member = undefined, localAvailabl
     },
   };
   t.mock.method(globalThis, "fetch", async (url, options = {}) => {
+    const intercepted = await control.intercept?.(url, options);
+    if (intercepted) return intercepted;
     if (url === "/api/auth/config") return response({enabled: member !== undefined, configured: true});
     if (url === "/api/auth/me") return response(control.member || {detail: "로그인하세요."}, control.member ? 200 : 401);
-    if (url === "/api/admin/members") return response([{id: "member-id", email: "member@example.test", displayName: "신청자", status: "pending", role: "member"}]);
+    if (url.startsWith("/api/admin/members?") || url === "/api/admin/members") return response({members: [{id: "member-id", email: "member@example.test", displayName: "신청자", status: "pending", role: "member"}], nextCursor: null});
     if (url === "/api/admin/budget") return response({limitKrw: 20000, accountedKrw: 40, stopped: false});
     if (url.startsWith("/api/admin/members/")) {
       control.authCalls.push({url, options});
@@ -98,7 +102,7 @@ async function dashboard(t, state = realState, member = undefined, localAvailabl
     querySelector: element, createElement: () => new Element(),
     body: new Element(), addEventListener() {},
   };
-  globalThis.FormData = class { get() { return ""; } };
+  globalThis.FormData = class { get(key) { return elements.get(`[name="${key}"]`)?.value || ""; } };
   if (!previousCrypto) globalThis.crypto = webcrypto;
   t.after(() => {
     globalThis.document = previousDocument;
@@ -107,6 +111,7 @@ async function dashboard(t, state = realState, member = undefined, localAvailabl
   });
   await import(`../app/static/js/app.js?test=${++instance}`);
   await new Promise(resolve => setImmediate(resolve));
+  element("#strategy").value = "최근 5일 수익률이 낮은 종목을 매수한다.";
   return {...control, control, element, submit: () => element("#strategy-form").emit("submit")};
 }
 
@@ -334,4 +339,218 @@ test("a running job is only read, and a terminal error is never retried automati
   assert.equal(ui.control.jobCalls[0].options.method, undefined);
   assert.match(ui.element("#error-message").textContent, /실패했거나 만료/);
   assert.equal(ui.element("#result-error").hidden, false);
+});
+
+test("logout erases private form, hidden results and administrator data", async t => {
+  const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
+  ui.element('[name="region"]').value = "USA";
+  ui.control.result.warnings = ["private warning"];
+  ui.control.result.intentMapping = [{requirement: "private", expression: "secret"}];
+  await ui.submit();
+  ui.element("#admin-usage").textContent = "private admin usage";
+  await ui.element("#auth-logout").emit("click");
+  for (const selector of ["#strategy", '[name="region"]']) assert.equal(ui.element(selector).value, "");
+  for (const selector of ["#expression-output", "#settings-copy", "#error-message", "#admin-usage"])
+    assert.equal(ui.element(selector).textContent, "");
+  for (const selector of ["#intent-mapping", "#warnings-list", "#settings-grid"])
+    assert.equal(ui.element(selector).children.length, 0);
+  ui.control.member = {id: "b", status: "approved", role: "member"};
+  await ui.element("#auth-refresh").emit("click");
+  assert.equal(ui.element("#strategy").value, "");
+  assert.equal(ui.element("#result-content").hidden, true);
+});
+
+test("same member refresh preserves draft while identity change clears it", async t => {
+  const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
+  ui.element("#strategy").value = "private draft";
+  ui.element("#training-consent").checked = false;
+  await ui.element("#auth-refresh").emit("click");
+  assert.equal(ui.element("#strategy").value, "private draft");
+  assert.equal(ui.element("#training-consent").checked, false);
+  ui.control.member = {id: "b", status: "approved", role: "member"};
+  await ui.element("#auth-refresh").emit("click");
+  assert.equal(ui.element("#strategy").value, "");
+});
+
+test("late conversion cannot restore private output after logout", async t => {
+  const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  ui.control.intercept = async url => url === "/api/convert" ? gate : null;
+  const pending = ui.submit();
+  await new Promise(resolve => setImmediate(resolve));
+  await ui.element("#auth-logout").emit("click");
+  release(response(ui.control.result));
+  await pending;
+  assert.equal(ui.element("#expression-output").textContent, "");
+  assert.equal(ui.element("#result-content").hidden, true);
+});
+
+test("session loss clears data and a late membership response cannot undo logout", async t => {
+  const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
+  let release;
+  ui.control.intercept = url => url === "/api/auth/me" ? new Promise(resolve => { release = resolve; }) : null;
+  const refresh = ui.element("#auth-refresh").emit("click");
+  await new Promise(resolve => setImmediate(resolve));
+  await ui.element("#auth-logout").emit("click");
+  release(response({id: "a", status: "approved", role: "member"}));
+  await refresh;
+  assert.equal(ui.element("#dashboard").hidden, true);
+  assert.equal(ui.element("#strategy").value, "");
+  ui.control.intercept = null;
+  ui.control.member = {id: "b", status: "approved", role: "member"};
+  await ui.element("#auth-refresh").emit("click");
+  ui.element("#strategy").value = "private b";
+  ui.control.member = null;
+  await ui.element("#auth-refresh").emit("click");
+  assert.equal(ui.element("#strategy").value, "");
+});
+
+test("queued strategy is never resubmitted after account switch", async t => {
+  const realTimeout = globalThis.setTimeout;
+  let wake;
+  t.mock.method(globalThis, "setTimeout", (callback, ms, ...args) => {
+    if (ms === 5000) { wake = callback; return 0; }
+    return realTimeout(callback, ms, ...args);
+  });
+  const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
+  ui.control.convertResponses = [[{status: "queued", queuePosition: 1}, 202]];
+  const conversion = ui.submit();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(typeof wake, "function");
+  ui.control.member = {id: "b", status: "approved", role: "member"};
+  await ui.element("#auth-refresh").emit("click");
+  wake();
+  await conversion;
+  assert.equal(ui.control.calls.length, 1);
+  assert.equal(ui.element("#result-content").hidden, true);
+});
+
+test("admin pagination uses cursor and resets it when search changes", async t => {
+  const ui = await dashboard(t, realState, {id: "admin", status: "approved", role: "admin"});
+  const urls = [];
+  ui.control.intercept = url => {
+    if (!url.startsWith("/api/admin/members?")) return null;
+    urls.push(url);
+    return response({members: [], nextCursor: {createdAt: "2026-09-27T00:00:00.123456Z", id: "old-member"}});
+  };
+  await ui.element("#members-refresh").emit("click");
+  await ui.element("#members-next").emit("click");
+  assert.equal(new URL(urls[1], "https://example.test").searchParams.get("before_id"), "old-member");
+  ui.element("#members-query").value = "target";
+  await ui.element("#members-next").emit("click");
+  const query = new URL(urls[2], "https://example.test").searchParams;
+  assert.equal(query.get("q"), "target");
+  assert.equal(query.has("before_id"), false);
+});
+
+test("late administrator results cannot refill cleared member data", async t => {
+  const ui = await dashboard(t, realState, {id: "admin", status: "approved", role: "admin"});
+  let release;
+  ui.control.intercept = url => url.startsWith("/api/admin/members?")
+    ? new Promise(resolve => { release = resolve; }) : null;
+  const loading = ui.element("#members-refresh").emit("click");
+  await new Promise(resolve => setImmediate(resolve));
+  await ui.element("#auth-logout").emit("click");
+  release(response({members: [{email: "private@example.test"}], nextCursor: null}));
+  await loading;
+  assert.equal(ui.element("#members-list").children.length, 0);
+  assert.equal(ui.element("#ai-budget-status").textContent, "");
+});
+
+test("an in-flight refresh finishes before logout and a stale 401 cannot launch a new refresh", async t => {
+  const {HarnessApi} = await import("../app/static/js/api.js");
+  const api = new HarnessApi();
+  const calls = [];
+  let release;
+  t.mock.method(globalThis, "fetch", async url => {
+    calls.push(url);
+    if (url.endsWith("refresh")) return new Promise(resolve => { release = resolve; });
+    return response({});
+  });
+  const refreshing = api.auth("refresh", {});
+  await new Promise(resolve => setImmediate(resolve));
+  const logout = api.auth("logout", {});
+  api.clearSession();
+  assert.equal(calls.length, 1);
+  release(response({}));
+  await Promise.all([refreshing, logout]);
+  assert.deepEqual(calls, ["/api/auth/refresh", "/api/auth/logout"]);
+  api.auth = async () => new Promise(resolve => { release = () => resolve(Promise.reject(Object.assign(new Error(), {status: 401}))); });
+  const me = api.me();
+  api.clearSession();
+  release();
+  await assert.rejects(me, /로그인 상태/);
+});
+
+function browserSession(t) {
+  const previous = globalThis.window;
+  const events = new Map();
+  const values = new Map();
+  globalThis.window = {
+    addEventListener: (name, callback) => events.set(name, callback),
+    localStorage: {getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value)},
+  };
+  t.after(() => { if (previous === undefined) delete globalThis.window; else globalThis.window = previous; });
+  return {change: () => values.set("brain-session-change", "another-tab-session"),
+    notify: () => events.get("storage")({key: "brain-session-change"}),
+    restore: () => events.get("pageshow")({persisted: true})};
+}
+
+test("another tab's logout erases this tab's private DOM", async t => {
+  const browser = browserSession(t);
+  const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
+  await ui.submit();
+  browser.change();
+  browser.notify();
+  assert.equal(ui.element("#strategy").value, "");
+  assert.equal(ui.element("#expression-output").textContent, "");
+  assert.equal(ui.element("#dashboard").hidden, true);
+});
+
+test("restoring a cached page clears the previous account before refreshing identity", async t => {
+  const browser = browserSession(t);
+  const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
+  await ui.submit();
+  browser.change();
+  ui.control.member = {id: "b", status: "approved", role: "member"};
+  const restored = browser.restore();
+  assert.equal(ui.element("#expression-output").textContent, "");
+  await restored;
+  assert.equal(ui.element("#strategy").value, "");
+  assert.equal(ui.element("#dashboard").hidden, false);
+});
+
+test("cross-tab session marker blocks queued resubmission even before a storage event", async t => {
+  const browser = browserSession(t);
+  const realTimeout = globalThis.setTimeout;
+  let wake;
+  t.mock.method(globalThis, "setTimeout", (callback, ms, ...args) => {
+    if (ms === 5000) { wake = callback; return 0; }
+    return realTimeout(callback, ms, ...args);
+  });
+  const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
+  ui.control.convertResponses = [[{status: "queued", queuePosition: 1}, 202]];
+  const pending = ui.submit();
+  await new Promise(resolve => setImmediate(resolve));
+  browser.change();
+  wake();
+  await pending;
+  assert.equal(ui.control.calls.length, 1);
+  assert.equal(ui.element("#strategy").value, "");
+  assert.equal(ui.element("#dashboard").hidden, true);
+});
+
+test("failed member reload removes inert rows and offers a working retry", async t => {
+  const ui = await dashboard(t, realState, {id: "admin", status: "approved", role: "admin"});
+  assert.equal(ui.element("#members-list").children.length, 1);
+  ui.control.intercept = url => url.startsWith("/api/admin/members?") ? response({detail: "일시 오류"}, 503) : null;
+  await ui.element("#members-refresh").emit("click");
+  assert.equal(ui.element("#members-list").children.length, 0);
+  assert.match(ui.element("#members-feedback").textContent, /새로고침/);
+  ui.control.intercept = null;
+  await ui.element("#members-refresh").emit("click");
+  const row = ui.element("#members-list").children[0];
+  await row.children[1].children.find(button => button.textContent === "승인").emit("click");
+  assert.ok(ui.control.authCalls.some(call => call.url === "/api/admin/members/member-id"));
 });

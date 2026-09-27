@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.config import AppConfig
 from backend.app.main import create_app
-from backend.app.membership import ACCESS_COOKIE, same_origin
+from backend.app.membership import ACCESS_COOKIE, REFRESH_COOKIE, same_origin
 from backend.app.provider import MockSemanticProvider
 
 ORIGIN = "https://brain.example.test"
@@ -130,10 +130,19 @@ def site():
                 },
             )
         if path == "/auth/v1/token":
+            if state.get("revoked"):
+                return httpx.Response(400, json={"message": "invalid refresh token"})
             return httpx.Response(
                 200, json={"access_token": ACCESS, "refresh_token": REFRESH, "expires_in": 3600}
             )
-        if path in {"/auth/v1/signup", "/auth/v1/logout"}:
+        if path == "/auth/v1/logout":
+            if state.get("logoutFails"):
+                return httpx.Response(503, json={"message": "unavailable"})
+            if request.headers.get("authorization") == "Bearer expired-test-token":
+                return httpx.Response(401, json={"message": "expired"})
+            state["revoked"] = True
+            return httpx.Response(204)
+        if path == "/auth/v1/signup":
             return httpx.Response(200, json={"access_token": ACCESS, "user": {"id": USER_ID}})
         if path.endswith("/brain_access"):
             return httpx.Response(
@@ -176,10 +185,17 @@ def site():
                 },
             )
         if path.endswith("/brain_members"):
-            return httpx.Response(200, json=[])
+            return httpx.Response(200, json=state.get("members", []))
+        if path.endswith("/brain_members_page"):
+            if state.get("pageStatus"):
+                return httpx.Response(state["pageStatus"], json={"code": state.get("pageCode")})
+            return httpx.Response(200, json={"members": [], "nextCursor": None})
         if path.endswith("/brain_budget_status"):
             return httpx.Response(200, json={"limitKrw": 20000, "accountedKrw": 4})
         if path.endswith("/brain_set_member_status"):
+            for member in state.get("members", []):
+                if member["id"] == payload["p_user_id"]:
+                    member["status"] = payload["p_status"]
             return httpx.Response(200, json={"status": payload["p_status"]})
         if path.endswith("/brain_usage"):
             return httpx.Response(
@@ -483,3 +499,114 @@ def test_vercel_automatically_uses_production_and_rejects_development(monkeypatc
     monkeypatch.setenv("APP_ENV", "development")
     with pytest.raises(ValueError, match="Vercel"):
         AppConfig.from_environment()
+
+
+@pytest.mark.parametrize("access", [None, "expired-test-token", ACCESS])
+def test_logout_revokes_refresh_session_and_clears_cookies(site, access):
+    client, state, _ = site
+    client.cookies.set(REFRESH_COOKIE, REFRESH)
+    if access:
+        client.cookies.set(ACCESS_COOKIE, access)
+    result = client.post("/api/auth/logout", headers=HEADERS)
+    assert result.status_code == 200
+    assert result.json()["sessionRevoked"] is True
+    assert state["revoked"] is True
+    assert len(result.headers.get_list("set-cookie")) == 2
+    assert all("Max-Age=0" in cookie for cookie in result.headers.get_list("set-cookie"))
+    client.cookies.clear()
+    client.cookies.set(REFRESH_COOKIE, REFRESH)
+    assert client.post("/api/auth/refresh", headers=HEADERS).status_code == 400
+    assert state["aiCalls"] == 0
+
+
+def test_logout_reports_unconfirmed_revocation_without_retaining_local_cookies(site):
+    client, state, _ = site
+    connect(client)
+    state["logoutFails"] = True
+    result = client.post("/api/auth/logout", headers=HEADERS)
+    assert result.json()["sessionRevoked"] is False
+    assert "확인하지 못" in result.json()["message"]
+    assert client.cookies.get(ACCESS_COOKIE) is None
+    assert client.cookies.get(REFRESH_COOKIE) is None
+    for value in (ACCESS, REFRESH, SECRET):
+        assert value not in result.text
+
+
+def test_admin_member_pages_pass_validated_filters_and_cursor(site):
+    client, state, _ = site
+    connect(client)
+    state.update(status="approved", role="admin")
+    result = client.get("/api/admin/members", params={
+        "status": "approved", "q": "target%_", "before": "2026-09-27T00:00:00.123456Z",
+        "before_id": USER_ID,
+    })
+    assert result.json() == {"members": [], "nextCursor": None}
+    path, body = state["calls"][-1]
+    assert path.endswith("/brain_members_page")
+    assert body == {"p_status": "approved", "p_query": "target%_",
+                    "p_before_created_at": "2026-09-27T00:00:00.123456+00:00",
+                    "p_before_id": USER_ID}
+    for params in ({"before_id": USER_ID}, {"status": "admin"}, {"q": "x" * 121},
+                   {"before": "2026-09-27T00:00:00", "before_id": USER_ID}):
+        assert client.get("/api/admin/members", params=params).status_code in {400, 422}
+
+
+def test_existing_database_restores_approved_list_and_suspension_without_new_rpc(site):
+    client, state, _ = site
+    connect(client)
+    state.update(status="approved", role="admin", pageStatus=404, pageCode="PGRST202",
+                 members=[{"id": USER_ID, "displayName": "테스트", "email": "member@example.test",
+                           "status": "approved", "role": "member", "emailConfirmed": True,
+                           "createdAt": "2026-09-27T00:00:00.123456+00:00"}])
+    response = client.get("/api/admin/members", params={"status": "approved", "q": "member"})
+    assert response.status_code == 200
+    assert [member["id"] for member in response.json()["members"]] == [USER_ID]
+    assert [path for path, _ in state["calls"]][-2:] == [
+        "/rest/v1/rpc/brain_members_page", "/rest/v1/rpc/brain_members"]
+    assert client.get("/api/admin/members").json() == state["members"]  # Older open tabs.
+    response = client.post(f"/api/admin/members/{USER_ID}", json={"status": "suspended"},
+                           headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()["status"] == "suspended"
+    response = client.get("/api/admin/members", params={"status": "suspended"})
+    assert response.json()["members"][0]["status"] == "suspended"
+    assert state["aiCalls"] == 0
+
+
+@pytest.mark.parametrize("status,code", [(401, "42501"), (503, None), (404, "other")])
+def test_member_list_does_not_fall_back_on_auth_or_connection_errors(site, status, code):
+    client, state, _ = site
+    connect(client)
+    state.update(status="approved", role="admin", pageStatus=status, pageCode=code)
+    response = client.get("/api/admin/members", params={"status": "approved"})
+    assert response.status_code == (401 if status == 401 else 503)
+    assert not any(path.endswith("/brain_members") for path, _ in state["calls"])
+
+
+def test_member_list_compatibility_keeps_pagination_and_reports_legacy_limit(site):
+    client, state, _ = site
+    connect(client)
+    state.update(status="approved", role="admin", pageStatus=404, pageCode="PGRST202",
+                 members=[{"id": str(uuid4()), "displayName": "합성", "email": None,
+                           "status": "approved", "role": "member",
+                           "createdAt": "2026-09-27T00:00:00.123456+00:00"} for _ in range(200)])
+    seen = []
+    params = {"status": "approved", "q": "합성"}
+    for _ in range(4):
+        page = client.get("/api/admin/members", params=params).json()
+        assert page["limited"] is True
+        assert len(page["members"]) == 50
+        seen.extend(member["id"] for member in page["members"])
+        if page["nextCursor"]:
+            params.update(before=page["nextCursor"]["createdAt"],
+                          before_id=page["nextCursor"]["id"])
+    assert len(seen) == len(set(seen)) == 200
+
+
+def test_member_list_compatibility_remains_admin_only(site):
+    client, state, _ = site
+    connect(client)
+    state.update(status="approved", role="member", pageStatus=404, pageCode="PGRST202")
+    assert client.get("/api/admin/members", params={"status": "approved"}).status_code == 403
+    assert not any(path.endswith(("/brain_members", "/brain_members_page"))
+                   for path, _ in state["calls"])

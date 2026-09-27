@@ -43,6 +43,21 @@ export class DashboardView {
       : "실제 AI 응답에는 최대 1분 정도 걸릴 수 있습니다.";
   }
 
+  clear() {
+    for (const selector of ["#expression-output", "#settings-copy", "#error-message",
+      "#result-mode-note", "#metric-status", "#metric-confidence", "#loading-description"]) {
+      this.root.querySelector(selector).textContent = "";
+    }
+    for (const selector of ["#settings-grid", "#intent-mapping", "#validation-list", "#warnings-list"]) {
+      this.root.querySelector(selector).replaceChildren();
+    }
+    this.root.querySelector("#warnings-block").hidden = true;
+    for (const id of ["expression-output", "settings-copy"]) {
+      this.root.querySelector(`[data-copy-target='${id}']`).disabled = true;
+    }
+    this.setState("empty");
+  }
+
   showError(message) {
     this.root.querySelector("#error-message").textContent = message;
     this.setState("error");
@@ -58,6 +73,7 @@ export class DashboardView {
     this.root.querySelector("#expression-output").textContent = result.fastExpression || "검증을 통과하지 못해 코드를 생성하지 않았습니다.";
     this.root.querySelector("[data-copy-target='expression-output']").disabled = !passed;
     this.root.querySelector("#settings-copy").textContent = JSON.stringify(result.simulationSettings, null, 2);
+    this.root.querySelector("[data-copy-target='settings-copy']").disabled = false;
     this.root.querySelector("#metric-status").textContent = label;
     this.root.querySelector("#metric-confidence").textContent = mock ? "모의 해석" : "AI 1회 해석";
     this.renderSettings(result.simulationSettings, result.settingsSource);

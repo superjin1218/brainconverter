@@ -61,10 +61,19 @@
       </section>
       <section id="member-admin-panel" class="member-admin" hidden aria-labelledby="members-title">
         <div class="block-head"><h2 id="members-title">회원 승인 관리</h2><button id="members-refresh" class="copy-button" type="button">새로고침</button></div>
+        <label>회원 상태
+          <select id="members-status">
+            <option value="">전체</option><option value="pending">승인 대기</option>
+            <option value="approved">승인됨</option><option value="rejected">거절됨</option>
+            <option value="suspended">이용 중지</option>
+          </select>
+        </label>
+        <label>이름·이메일 검색 <input id="members-query" type="search" maxlength="120" placeholder="검색어 입력 후 새로고침" /></label>
         <p class="auth-note">이메일 인증을 마친 회원을 승인하거나 이용을 중지할 수 있습니다.</p>
         <p id="ai-budget-status" class="auth-note" role="status">AI 비용 한도 확인 중…</p>
         <p id="members-feedback" role="status"></p>
         <div id="members-list"></div>
+        <button id="members-next" class="copy-button" type="button" disabled>다음 50명</button>
       </section>
       <div class="dialog-footer">
         <button id="done-settings" class="copy-button" type="button">닫기</button>

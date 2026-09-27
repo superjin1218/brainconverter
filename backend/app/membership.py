@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from .config import AppConfig
 
 ACCESS_COOKIE = "brain_access"
 REFRESH_COOKIE = "brain_refresh"
+
+
+class MemberPageUnavailable(HTTPException):
+    def __init__(self):
+        super().__init__(503, "회원 목록의 새 조회 기능을 아직 사용할 수 없습니다.")
 
 
 def same_origin(request: Request, public_url: str = "") -> None:
@@ -52,6 +58,10 @@ class MembershipService:
                     params=params,
                 )
             if response.status_code >= 400:
+                if response.status_code == 404 and path == "/rest/v1/rpc/brain_members_page":
+                    error = response.json()
+                    if isinstance(error, dict) and error.get("code") == "PGRST202":
+                        raise MemberPageUnavailable()
                 if response.status_code in {401, 403}:
                     raise HTTPException(401, "로그인 정보가 만료됐습니다. 다시 로그인하세요.")
                 if response.status_code == 429:
@@ -69,6 +79,40 @@ class MembershipService:
         return await self.request(
             "POST", f"/rest/v1/rpc/{name}", token=token, body=body or {}, server=server
         )
+
+    async def member_page(self, token, *, status, query, before, before_id):
+        try:
+            return await self.rpc("brain_members_page", token, {
+                "p_status": status, "p_query": query,
+                "p_before_created_at": before.isoformat() if before else None,
+                "p_before_id": str(before_id) if before_id else None,
+            })
+        except MemberPageUnavailable:
+            # Existing deployments retain their approved-admin RPC and grants.
+            rows = await self.rpc("brain_members", token)
+            if not isinstance(rows, list):
+                raise HTTPException(503, "회원 목록을 확인하지 못했습니다.") from None
+            limited = len(rows) >= 200
+            try:
+                def order(member):
+                    created = datetime.fromisoformat(member["createdAt"].replace("Z", "+00:00"))
+                    if created.tzinfo is None:
+                        raise ValueError()
+                    return created, UUID(member["id"])
+
+                rows = sorted(rows, key=order, reverse=True)
+                query = query.lower()
+                rows = [member for member in rows
+                        if (not status or member["status"] == status)
+                        and (not query or query in member["displayName"].lower()
+                             or query in (member["email"] or "").lower())
+                        and (before is None or order(member) < (before, before_id))]
+            except (KeyError, TypeError, AttributeError, ValueError):
+                raise HTTPException(503, "회원 목록을 확인하지 못했습니다.") from None
+            page = rows[:50]
+            cursor = {"createdAt": page[-1]["createdAt"], "id": page[-1]["id"]} \
+                if len(rows) > 50 else None
+            return {"members": page, "nextCursor": cursor, "limited": limited}
 
     async def identify(self, request: Request, *, approved=False, admin=False):
         token = request.cookies.get(ACCESS_COOKIE)
@@ -204,20 +248,57 @@ def auth_router(service: MembershipService) -> APIRouter:
         same_origin(request, config.public_url)
         require_enabled()
         token = request.cookies.get(ACCESS_COOKIE)
-        if token:
-            try:
+        refresh_token = request.cookies.get(REFRESH_COOKIE)
+        revoked = not (token or refresh_token)
+        try:
+            if token:
+                try:
+                    await service.request("POST", "/auth/v1/logout", token=token)
+                    revoked = True
+                except HTTPException as error:
+                    if error.status_code != 401:
+                        raise
+            if not revoked and refresh_token:
+                data = await service.request(
+                    "POST", "/auth/v1/token", body={"refresh_token": refresh_token},
+                    params={"grant_type": "refresh_token"},
+                )
+                token = data.get("access_token") if isinstance(data, dict) else None
+                if not isinstance(token, str) or not token:
+                    raise HTTPException(503, "로그인 세션을 확인하지 못했습니다.")
                 await service.request("POST", "/auth/v1/logout", token=token)
-            except HTTPException:
-                pass
+                revoked = True
+        except HTTPException:
+            revoked = False
         response.delete_cookie(ACCESS_COOKIE, path="/api", secure=config.is_production)
         response.delete_cookie(REFRESH_COOKIE, path="/api/auth", secure=config.is_production)
-        return {"message": "로그아웃했습니다."}
+        return {
+            "sessionRevoked": revoked,
+            "message": "로그아웃했습니다." if revoked else (
+                "이 브라우저에서 로그아웃했습니다. 서버 세션 종료는 확인하지 못했습니다. "
+                "공유 기기라면 운영자에게 세션 종료를 요청하세요."
+            ),
+        }
 
     @router.get("/api/admin/members")
-    async def members(request: Request):
+    async def members(
+        request: Request,
+        status: str = Query("", pattern="^(|pending|approved|rejected|suspended)$"),
+        q: str = Query("", max_length=120),
+        before: datetime | None = None,
+        before_id: UUID | None = None,
+    ):
         require_enabled()
         await service.identify(request, admin=True)
-        return await service.rpc("brain_members", request.cookies[ACCESS_COOKIE])
+        if not request.query_params:
+            # Tabs opened before the frontend upgrade expect the original array.
+            return await service.rpc("brain_members", request.cookies[ACCESS_COOKIE])
+        if (before is None) != (before_id is None) or (before and before.tzinfo is None):
+            raise HTTPException(400, "회원 목록의 페이지 정보를 확인하세요.")
+        return await service.member_page(
+            request.cookies[ACCESS_COOKIE], status=status, query=q.strip(),
+            before=before, before_id=before_id,
+        )
 
     @router.post("/api/admin/members/{user_id}")
     async def update_member(user_id: UUID, request: Request):

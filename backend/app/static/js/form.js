@@ -44,6 +44,12 @@ export class StrategyForm {
     this.updateCount();
   }
 
+  clear() {
+    this.form.reset();
+    this.setStrategy("");
+    for (const name of SETTINGS_FIELDS) this.form.querySelector(`[name="${name}"]`).value = "";
+  }
+
   setBusy(isBusy) {
     this.submitButton.disabled = isBusy;
   }
@@ -52,4 +58,3 @@ export class StrategyForm {
     this.charCount.textContent = `${this.strategyInput.value.length.toLocaleString()} / 2,000`;
   }
 }
-

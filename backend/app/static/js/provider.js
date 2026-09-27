@@ -57,13 +57,17 @@ export class LocalProviderPanel {
   }
 
   async refresh() {
+    const generation = this.api.generation;
     try {
       const local = await this.api.localProvider();
+      if (generation !== this.api.generation) return null;
       if (!local && !this.accessAllowed) return null;
       const state = local ? {...local, localKeyEntry: true} : await this.api.provider();
+      if (generation !== this.api.generation) return null;
       if (state) this.render(state);
       return state;
     } catch (error) {
+      if (generation !== this.api.generation) return null;
       document.querySelector("#provider-chip").textContent = "연결 상태 확인 실패";
       throw error;
     }
@@ -133,6 +137,7 @@ export class LocalProviderPanel {
   async change(disconnect) {
     if (!this.settingsAllowed || !this.allowLocalEntry || !this.state?.localKeyEntry || this.connectButton.disabled) return;
     this.setBusy(true);
+    const generation = this.api.generation;
     this.feedback.textContent = disconnect ? "연결 해제 중…" : "키 설정 중…";
     this.feedback.classList.remove("failed");
     try {
@@ -140,16 +145,20 @@ export class LocalProviderPanel {
       const pending = this.api.setLocalProvider(disconnect ? null : this.input.value.trim());
       this.input.value = "";
       const state = await pending;
+      if (generation !== this.api.generation) return;
       this.api.pending = null;
       this.render({...state, localKeyEntry: true});
       this.feedback.textContent = disconnect ? "입력한 키를 해제했습니다. 현재 모의 모드입니다." : "키를 설정했습니다. 설정을 닫고 전략을 변환해 보세요.";
       this.onChange();
     } catch (error) {
+      if (generation !== this.api.generation) return;
       this.feedback.classList.add("failed");
       this.feedback.textContent = error.message;
     } finally {
-      this.input.value = "";
-      this.setBusy(false);
+      if (generation === this.api.generation) {
+        this.input.value = "";
+        this.setBusy(false);
+      }
     }
   }
 }

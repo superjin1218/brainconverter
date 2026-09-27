@@ -73,6 +73,8 @@ def db():
         [
             "docker",
             "run",
+            "--pull=never",
+            "--network=none",
             "--rm",
             "-d",
             "--name",
@@ -161,6 +163,7 @@ def test_ordinary_member_cannot_list_or_approve_anyone(db):
     approve(db)
     for sql in (
         "select public.brain_members();",
+        "select public.brain_members_page();",
         f"select public.brain_set_member_status('{MEMBER}','approved');",
     ):
         assert "insufficient_privilege" in db.run(
@@ -402,3 +405,49 @@ def test_missing_budget_row_fails_closed(db):
     db.run("delete from private.brain_ai_budget;")
     assert budget_reserve(db, MEMBER, request)["state"] == "unavailable"
     db.run((ROOT / "supabase/migrations/202609270003_ai_budget.sql").read_text())
+
+
+def test_admin_pages_reach_older_members_despite_registration_flood(db):
+    approve(db)
+    db.run(f"""
+      update private.brain_members set created_at='2020-01-01' where user_id='{MEMBER}';
+      insert into auth.users(id,email) select
+        ('20000000-0000-0000-0000-' || lpad(i::text,12,'0'))::uuid,
+        'synthetic-' || i || '@example.test' from generate_series(1,220) i;
+      update private.brain_members set created_at='2026-09-27 00:00:00.123456+00'
+        where user_id::text like '20000000-%';
+    """)
+    seen = []
+    args = ""
+    for _ in range(6):
+        page = db.rpc("brain_members_page", args, role="authenticated", user=ADMIN)
+        assert len(page["members"]) <= 50
+        seen.extend(member["id"] for member in page["members"])
+        cursor = page["nextCursor"]
+        if not cursor:
+            break
+        args = f"'','','{cursor['createdAt']}','{cursor['id']}'"
+    assert len(seen) == len(set(seen)) == 224
+    assert MEMBER in seen
+    # Moderating the intake must not make the older approved target undiscoverable.
+    db.run("update private.brain_members set status='rejected' "
+           "where user_id::text like '20000000-%';")
+    page = db.rpc("brain_members_page", "'approved','member@example.test'",
+                  role="authenticated", user=ADMIN)
+    assert [member["id"] for member in page["members"]] == [MEMBER]
+    page = db.rpc("brain_members_page", "'','%_'", role="authenticated", user=ADMIN)
+    assert page["members"] == []  # Literal substring, not SQL wildcard matching.
+
+
+@pytest.mark.parametrize("args", ["null", "'invalid'", "'',null", "'',repeat('x',121)",
+                                  "'','','2026-09-27',null"])
+def test_member_page_rejects_invalid_parameters(db, args):
+    assert "invalid member page parameters" in db.run(
+        f"select public.brain_members_page({args});", role="authenticated", user=ADMIN, fails=True
+    )
+
+
+def test_anonymous_cannot_execute_member_pages(db):
+    assert "permission denied" in db.run(
+        "select public.brain_members_page();", role="anon", fails=True
+    )
