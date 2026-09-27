@@ -9,7 +9,7 @@ const bindings = env as unknown as Env;
 const secret = bindings.GATEWAY_SHARED_SECRET;
 let keys: Awaited<ReturnType<typeof generateKeyPair>>;
 let publicKey: Awaited<ReturnType<typeof exportJWK>>;
-let replies: {delay: number; status: number}[] = [];
+let replies: {delay: number; status: number; waitFor?: Promise<void>}[] = [];
 beforeAll(async () => {
   keys = await generateKeyPair("RS256", {extractable: true});
   publicKey = await exportJWK(keys.publicKey);
@@ -26,6 +26,7 @@ beforeEach(async () => {
     const headers = new Headers(init?.headers);
     const prefix = `${headers.get("x-gateway-timestamp")}\nPOST\n/api/convert\n${headers.get("x-user-email")}\n${headers.get("x-request-id")}\n`;
     expect(headers.get("x-gateway-signature")).toBe(await hexDigest(prefix + init?.body, secret));
+    await next.waitFor;
     if (next.delay) await new Promise(resolve => setTimeout(resolve, next.delay));
     return Response.json(next.status === 200 ? {status: "PASS", usage: {costMicrousd: 3510}} :
       {detail: "private upstream error"}, {status: next.status});
@@ -56,9 +57,9 @@ async function request(path = "/api/usage", options: {email?: string; body?: str
   return new Response(await response.arrayBuffer(), {status: response.status, headers: response.headers});
 }
 const body = JSON.stringify({strategy: "최근 5일 동안 많이 떨어진 종목"});
-async function finished(id: string) {
+async function finished(id: string, email?: string) {
   for (let i = 0; i < 100; i++) {
-    const response = await request(`/api/jobs/${id}`);
+    const response = await request(`/api/jobs/${id}`, {email});
     if (response.status !== 202) return response;
     await new Promise(resolve => setTimeout(resolve, 10));
   }
@@ -107,17 +108,20 @@ describe("durable quota and idempotency", () => {
     expect((await request(`/api/jobs/${key}`, {email: "admin@example.com"})).status).toBe(404);
   });
   it("caps global concurrency at two even across members", async () => {
-    backend(100); backend(100);
+    let release!: () => void;
+    const waitFor = new Promise<void>(resolve => { release = resolve; });
+    replies.push({delay: 0, status: 200, waitFor}, {delay: 0, status: 200, waitFor});
     const keys = [crypto.randomUUID(), crypto.randomUUID()];
-    expect((await request("/api/convert", {body, key: keys[0]})).status).toBe(202);
-    expect((await request("/api/convert", {body, key: keys[1], email: "admin@example.com"})).status).toBe(202);
-    expect((await request("/api/convert", {body})).status).toBe(503);
-    await finished(keys[0]);
-    // Wait for the admin job as well before resetting storage.
-    const admin = await token("admin@example.com");
-    for (let i = 0; i < 100; i++) {
-      if ((await request(`/api/jobs/${keys[1]}`, {token: admin})).status !== 202) break;
-      await new Promise(resolve => setTimeout(resolve, 10));
+    try {
+      // Keep both upstream requests pending regardless of CI scheduling speed.
+      expect((await request("/api/convert", {body, key: keys[0]})).status).toBe(202);
+      expect((await request("/api/convert", {body, key: keys[1], email: "admin@example.com"})).status).toBe(202);
+      expect((await request("/api/convert", {body})).status).toBe(503);
+    } finally {
+      release();
+      // Drain both jobs before the next test resets Durable Object storage.
+      const results = await Promise.all([finished(keys[0]), finished(keys[1], "admin@example.com")]);
+      expect(results.map(response => response.status)).toEqual([200, 200]);
     }
   });
   it("enforces monthly quota and budget atomically", async () => {
