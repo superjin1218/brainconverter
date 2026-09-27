@@ -110,7 +110,6 @@ export class LocalProviderPanel {
     document.querySelector("#provider-key-note").hidden = !canEdit;
     document.querySelector("#training-notice").hidden = mock;
     document.querySelector("#training-consent").required = !mock;
-    document.querySelector("#refresh-usage").hidden = document.querySelector("#auth-logout").hidden;
   }
 
   setBusy(busy) {

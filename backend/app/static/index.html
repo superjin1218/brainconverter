@@ -164,7 +164,7 @@
           </details>
 
           <div class="submit-row">
-            <p id="quota-status" aria-live="polite">사용량 확인 중…</p>
+            <p id="quota-status" aria-live="polite" hidden>사용량 확인 중…</p>
             <button id="submit-button" type="submit">
               <span>전략 변환하기</span><span aria-hidden="true">→</span>
             </button>
@@ -173,7 +173,7 @@
             <input id="training-consent" type="checkbox" />
             <span>Muse Spark Contributor는 입력 전략과 응답을 Meta의 모델 학습에 사용합니다. 이 조건을 확인하고 변환에 동의합니다.</span>
           </label>
-          <button id="refresh-usage" class="copy-button" type="button">남은 횟수 확인</button>
+          <button id="refresh-usage" class="copy-button" type="button" hidden>남은 횟수 확인</button>
         </form>
 
         <aside class="privacy-note">

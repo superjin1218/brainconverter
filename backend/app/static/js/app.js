@@ -2,7 +2,7 @@ import {HarnessApi} from "./api.js";
 import {StrategyForm} from "./form.js";
 import {DashboardView} from "./view.js";
 import {registerConversionTool} from "./webmcp.js";
-import {LocalProviderPanel} from "./provider.js?v=membership-access-1";
+import {LocalProviderPanel} from "./provider.js?v=admin-usage-1";
 import {MembershipPanel} from "./membership.js";
 
 class HarnessDashboard {
@@ -48,7 +48,15 @@ class HarnessDashboard {
   }
 
   async refreshUsage() {
-    if (this.membership.enabled && this.membership.member?.status !== "approved") return;
+    const admin = this.membership.member?.status === "approved" && this.membership.member.role === "admin";
+    const showUsage = !this.membership.enabled || admin;
+    document.querySelector("#quota-status").hidden = !showUsage;
+    document.querySelector("#refresh-usage").hidden = !this.membership.enabled || !admin;
+    if (!showUsage) {
+      document.querySelector("#quota-status").textContent = "";
+      document.querySelector("#admin-panel").hidden = true;
+      return;
+    }
     try {
       const usage = await this.api.usage();
       document.querySelector("#quota-status").textContent = usage

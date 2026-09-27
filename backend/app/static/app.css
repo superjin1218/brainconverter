@@ -147,6 +147,7 @@ select, input {
 .submit-row p { margin: 0; color: var(--muted); font-size: 13px; }
 .submit-row p b { color: var(--text); }
 #submit-button {
+  margin-left: auto;
   min-width: 190px; display: flex; align-items: center; justify-content: space-between; gap: 22px;
   padding: 15px 18px; border: 0; border-radius: 11px; color: #08100c; background: var(--lime);
   font-weight: 800; transition: transform .18s, opacity .18s;
