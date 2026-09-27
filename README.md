@@ -37,7 +37,7 @@ AI는 **Muse Spark 1.3 Contributor**로 고정했습니다. 변환 규칙을 담
 
 누적 금액은 공급자 청구서가 아닌 여유를 둔 계산입니다. 실제 카드 청구액·다른 앱 호출·호스팅 비용까지 제한하지 않습니다. [계산과 적용 범위](docs/AI_BUDGET.md)를 확인하세요.
 
-Contributor는 입력과 응답을 Meta의 모델 학습에 사용하는 조건이 있습니다. 변환 화면에서 안내하고 동의를 받아야 실제 모델을 호출합니다. [Meta 조건·요금](https://dev.meta.ai/docs/pricing-rate-limits), [Vercel 모델](https://vercel.com/ai-gateway/models/muse-spark-1.3-contributor).
+Contributor는 입력과 응답을 Meta의 모델 학습에 사용하는 조건이 있습니다. 변환 화면에 안내하며, 승인된 일반 회원은 로그인 시 동의 체크박스가 기본 선택됩니다. 회원이 체크를 해제하면 실제 모델을 호출하지 않습니다. [Meta 조건·요금](https://dev.meta.ai/docs/pricing-rate-limits), [Vercel 모델](https://vercel.com/ai-gateway/models/muse-spark-1.3-contributor).
 
 ## 로컬 실행
 

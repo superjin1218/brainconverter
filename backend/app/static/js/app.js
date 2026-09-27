@@ -3,7 +3,7 @@ import {StrategyForm} from "./form.js";
 import {DashboardView} from "./view.js";
 import {registerConversionTool} from "./webmcp.js";
 import {LocalProviderPanel} from "./provider.js?v=admin-usage-1";
-import {MembershipPanel} from "./membership.js";
+import {MembershipPanel} from "./membership.js?v=member-consent-1";
 
 class HarnessDashboard {
   constructor() {

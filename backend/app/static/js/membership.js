@@ -4,6 +4,7 @@ export class MembershipPanel {
     this.onChange = onChange;
     this.enabled = true;
     this.member = null;
+    this.consentMemberKey = null;
     this.mode = "login";
     this.panel = document.querySelector("#auth-panel");
     this.form = document.querySelector("#auth-form");
@@ -104,6 +105,14 @@ export class MembershipPanel {
 
   render() {
     const approved = this.member?.status === "approved";
+    const consentMemberKey = approved && this.member.role === "member"
+      ? this.member.id || this.member.email || "member"
+      : null;
+    // Set the member default once; keep a user's opt-out during status refreshes.
+    if (consentMemberKey && consentMemberKey !== this.consentMemberKey) {
+      document.querySelector("#training-consent").checked = true;
+    }
+    this.consentMemberKey = consentMemberKey;
     this.panel.hidden = approved;
     document.querySelector("#dashboard").hidden = !approved;
     document.querySelector("#auth-login-card").hidden = !!this.member;
