@@ -74,9 +74,15 @@ Vercel AI Gateway를 따로 선택하려면 `MUSE_API_PROVIDER=gateway`와 Verce
 
 ## 5. 배포 및 확인
 
-현재 **Ignored Build Step: Don’t build anything (`exit 0`)**이며 실제 배포가 없습니다. 저장소의 `vercel.json`에도 `git.deploymentEnabled=false`를 설정하여 모든 브랜치의 Git 자동 배포를 차단합니다. GitHub 코드 저장과 웹사이트 배포는 별개이며 배포 허용 전까지 두 중지 설정을 유지합니다. [Vercel Git 배포 설정](https://vercel.com/docs/project-configuration/git-configuration#turning-off-all-automatic-deployments).
+### 재배포 전 빌드 준비 (2026-09-28)
 
-환경변수·SMTP·DB와 검증 결과를 확인한 후 **배포 직전에 운영자 승인을 받습니다.** 승인 후에만 자동 빌드 중지 설정을 해제하고 최초 배포합니다. 향후 자동 배포를 원할 때 `git.deploymentEnabled`를 `true`로 변경하며, 수동 배포 승인과 향후 자동 배포 허용은 별개입니다. 가입→인증→승인 대기→운영자 승인→단순 전략 한 번 변환→이용 중지 차단을 확인합니다. BRAIN Simulate는 사용자가 별도로 실행합니다.
+첫 배포 시 `uv lock`이 `No project table found`로 실패했습니다. `pyproject.toml`에 프로젝트 메타데이터와 `requirements.txt`와 동일한 런타임 의존성 4개를 추가하고 `uv.lock`을 생성했습니다. 로컬 Python 3.12의 별도 환경에서 `uv lock`과 `uv sync --locked --no-dev`, `app.py` 로딩을 확인했습니다. 정적 파일 존재와 운영 API 문서 비공개도 확인했으며 실제 AI 제공자는 초기화하지 않았습니다. 실제 Vercel 빌드 성공은 재배포 후 확인해야 합니다.
+
+Vercel의 Ignored Build Step은 `Automatic`으로 저장했으며, 저장소의 `git.deploymentEnabled=false`는 유지합니다. GitHub 수정 반영만으로 재배포하지 않습니다. 재배포 시 기존 실패 배포의 **Redeploy** 대신 **Deployments → Deployments actions → Create Deployment → main**에서 새 수정 커밋을 확인하고 **Deploy to Production**을 선택하세요. SQL 004는 운영 DB에 적용하지 않았습니다.
+
+초기에는 **Ignored Build Step: Don’t build anything (`exit 0`)**으로 배포를 중지했습니다. 승인된 수동 배포를 위해 현재는 `Automatic`으로 변경했습니다. 저장소의 `vercel.json`에는 `git.deploymentEnabled=false`를 유지하여 모든 브랜치의 Git 자동 배포를 차단합니다. GitHub 코드 저장과 수동 웹사이트 배포는 별개입니다. [Vercel Git 배포 설정](https://vercel.com/docs/project-configuration/git-configuration#turning-off-all-automatic-deployments).
+
+환경변수·SMTP·DB와 검증 결과를 확인한 후 **배포 직전에 운영자 승인을 받습니다.** 현재 요청 범위는 재배포 전 준비까지이며 재배포는 실행하지 않습니다. 향후 자동 배포를 원할 때 `git.deploymentEnabled`를 `true`로 변경하며, 수동 배포 승인과 향후 자동 배포 허용은 별개입니다. 가입→인증→승인 대기→운영자 승인→단순 전략 한 번 변환→이용 중지 차단을 확인합니다. 실제 유료 AI 변환은 사용자가 별도로 실행하고, 에이전트는 운영 DB 변경 없이 허용된 확인만 진행합니다. BRAIN Simulate는 사용자가 별도로 실행합니다.
 
 ## 월 비용과 상시 운영
 
