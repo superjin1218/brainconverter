@@ -12,6 +12,8 @@
 - Vercel Production 모델·인증 설정과 기존 Supabase 서버 Secret 저장을 확인했습니다.
 - 모델 ID·Chat Completions 경로·최소 추론·출력 제한·JSON Schema 요청은 공식 문서와 비교했습니다. [Vercel 모델 안내](https://vercel.com/ai-gateway/models/muse-spark-1.3-contributor), [Gateway 추론 설정](https://vercel.com/docs/ai-gateway/models-and-providers/reasoning), [Meta 구조화 출력](https://dev.meta.ai/docs/structured-output).
 
+2026-09-27 로컬에서 실제 Gateway 요청을 1회 보냈으나 인증 실패(401)로 종료됐습니다. 자동 재시도는 하지 않았습니다. 사용량 1회와 보수적 예산 4원 예약은 확인했지만 실제 토큰 사용량·청구액은 측정하지 못했습니다.
+
 **실제 Muse 호출 성공·한국어 해석 품질·응답 지연·배포 환경의 가입/승인/변환 연결은 아직 확인하지 않았습니다.** 배포할 때 이 검증을 통과해야 운영 가능하다고 판단할 수 있습니다. 문서상 호환이나 테스트 응답 성공으로 실제 모델의 정확도를 보장하지 않습니다.
 
 현재는 가격/수익률의 단일 신호, 일정 기간 가격 변화, 평균 대비 거래량 같은 필터와 중립화를 지원합니다. 복합 신호·재무 데이터·기간 수익률 계산·상위 N개 선정·이동평균 교차·손절/익절은 지원 범위 밖이며 거절해야 합니다. 모든 자연어 전략을 변환하는 프로그램은 아닙니다. PASS는 내부 변환 검사의 통과이며 BRAIN Simulate 성공이나 수익성을 뜻하지 않습니다.
@@ -56,4 +58,4 @@ Gateway의 무료 $5 크레딧은 일부 모델에만 적용되므로 Muse가 �
 5. 배포 환경에서 미승인 회원 차단·승인 후 변환·이용 중지 후 차단·중복 요청 결과 재사용을 확인합니다.
 6. 생성된 FASTEXPR를 BRAIN에서 사용자가 직접 실행해 문법·설정 호환을 확인합니다.
 
-현재 배포·실제 Muse 호출·BRAIN 실행은 하지 않았습니다. 설정 절차는 [VERCEL_SUPABASE_SETUP.md](VERCEL_SUPABASE_SETUP.md)를 따릅니다.
+현재 실제 Gateway 요청 1회는 인증 실패로 종료됐으며, Muse 응답 성공·배포·BRAIN 실행은 확인하지 않았습니다. 설정 절차는 [VERCEL_SUPABASE_SETUP.md](VERCEL_SUPABASE_SETUP.md)를 따릅니다.

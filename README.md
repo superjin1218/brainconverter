@@ -13,7 +13,7 @@ AI는 **Muse Spark 1.3 Contributor**로 고정했습니다. 변환 규칙을 담
 - 누적 2만 원 자동 중지: [AI_BUDGET.md](docs/AI_BUDGET.md)
 - 푸시 전 코드 검토·검증 기록: [CODE_REVIEW.md](docs/CODE_REVIEW.md)
 
-이 버전은 배포 전 준비 단계입니다. `vercel.json`의 `git.deploymentEnabled=false`로 Git 푸시에 따른 자동 배포를 차단합니다. 실제 배포는 아직 하지 않았으며, 새 모델의 실제 API 및 실제 Supabase 가입 흐름은 계정 설정을 마친 후 확인해야 합니다.
+이 버전은 배포 전 준비 단계입니다. `vercel.json`의 `git.deploymentEnabled=false`로 Git 푸시에 따른 자동 배포를 차단합니다. 로컬 서버의 키 적용과 관리자 로그인은 확인했습니다. 2026-09-27 실제 AI 요청 1회는 Gateway 인증 실패(401)로 종료돼 키 발급처·유효성 확인이 필요합니다. 실제 생성 성공·일반 회원 가입 흐름·배포는 아직 확인하지 않았습니다.
 
 ## 회원 이용 흐름
 
@@ -21,7 +21,7 @@ AI는 **Muse Spark 1.3 Contributor**로 고정했습니다. 변환 규칙을 담
 
 운영자는 **설정 → 회원 승인 관리**에서 승인·거절·이용 중지를 처리합니다. 일반 회원에게 설정 버튼·키 입력창은 표시하지 않으며 서버 공용 키를 자동으로 사용합니다. 최초 운영자 `seungzookim@gmail.com`의 이메일 인증·approved/admin 상태를 실제 Supabase에서 확인했습니다. 회원가입 폼의 값으로 승인·운영자 권한을 부여할 수 없습니다.
 
-인증 토큰은 HttpOnly 쿠키에 보관합니다. 서버는 Supabase에서 로그인 신원을 확인하고 DB의 승인 상태를 검사합니다. 모델 키와 Supabase 서버 키는 Vercel Secret에만 설정하며 회원에게 노출하지 않습니다.
+인증 토큰은 HttpOnly 쿠키에 보관합니다. 서버는 Supabase에서 로그인 신원을 확인하고 DB의 승인 상태를 검사합니다. 모델 키와 Supabase 서버 키는 배포 시 Vercel Secret, 로컬 시험 시 Git에서 제외된 `.env.local`에만 설정하며 회원에게 노출하지 않습니다.
 
 앱은 비밀번호의 최소 길이·특수문자·영문 조합을 요구하지 않습니다. Supabase 프로젝트의 현재 규칙은 최소 6자이며 문자 조합 요구가 없어 6자 이상 숫자 학번을 사용할 수 있습니다. 실제 회원 계정은 운영자가 별도로 준비합니다.
 
