@@ -234,7 +234,8 @@ footer { width: min(1460px, calc(100% - 40px)); margin: 0 auto 30px; display: fl
 .member-row small { display: block; color: #a9b4c4; padding-top: 6px; overflow-wrap: anywhere; }
 .member-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .training-notice { display: flex; align-items: flex-start; gap: 10px; font-size: 12px; line-height: 1.7; margin: 20px 0; color: #c1ccd9; }
-.training-notice input { margin-top: 4px; accent-color: #c9f35d; flex: 0 0 auto; }
+.training-notice input { width: 18px; height: 18px; padding: 0; margin: 2px 0 0; accent-color: #c9f35d; flex: 0 0 18px; }
+.training-notice span { min-width: 0; }
 @media (max-width: 680px) {
   .auth-shell { margin: 30px auto; }
   .auth-card { padding: 24px; }
