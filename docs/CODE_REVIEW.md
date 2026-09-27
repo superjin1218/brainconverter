@@ -14,6 +14,7 @@
 - 앱의 비밀번호 최소 8자 검사와 안내를 제거했습니다. 숫자 비밀번호 전달을 대역 Auth로 검증했습니다. 실제 Supabase는 최소 6자·문자 조합 요구 없음으로 확인했으며 계정 생성·비밀번호 변경은 하지 않았습니다.
 - Git 푸시로 배포하지 않도록 `vercel.json`에 `git.deploymentEnabled=false`를 추가했습니다. 기존 Vercel의 빌드 중지 설정도 유지합니다. 현재 공급자·회원 화면과 맞지 않는 이전 클라우드 배포 workflow는 `if: false`로 비활성화했습니다. 이전 scripts·Gateway는 과거 구성의 기록이며 현재 배포용으로 사용하지 않습니다. [Vercel 공식 설정](https://vercel.com/docs/project-configuration/git-configuration#turning-off-all-automatic-deployments).
 - `.env.*`와 `.vercel/`을 Git·컨테이너 빌드 대상에서 제외했습니다. Git에는 빈 키 예시 파일만 포함합니다. 키·JWT·비밀키 패턴 검사에서 두 개의 명시적 테스트 대역 키만 발견했습니다. README·개발 안내·현재 상태 문서를 최신 구조와 비밀번호 정책에 맞췄습니다. 로그인·회원가입 화면의 요청된 가입 절차 설명도 제거했습니다.
+- 첫 GitHub CI에서 숫자 비밀번호 테스트의 기대값이 이전 문자 값으로 남은 오류를 발견해 입력값과 일치하도록 수정했습니다. 웹사이트가 전송한 값은 요청한 숫자 비밀번호였으며 테스트 데이터의 불일치를 바로잡았습니다.
 
 ## 검증
 

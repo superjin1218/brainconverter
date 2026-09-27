@@ -200,7 +200,7 @@ test("signup sends credentials once and clears the visible password", async t =>
   ui.element("#auth-name").value = "신청자";
   await ui.element("#auth-form").emit("submit");
   const call = ui.control.authCalls.find(call => call.url.endsWith("signup"));
-  assert.deepEqual(JSON.parse(call.options.body), {email: "member@example.test", password: "test-only-password", displayName: "신청자"});
+  assert.deepEqual(JSON.parse(call.options.body), {email: "member@example.test", password: "123456", displayName: "신청자"});
   assert.equal(ui.element("#auth-password").value, "");
   assert.equal(ui.element("#dashboard").hidden, true);
   assert.match(ui.element("#auth-feedback").textContent, /이메일 인증/);
