@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": false
+  },
+  "regions": ["icn1"],
+  "functions": {
+    "app.py": {
+      "maxDuration": 65,
+      "includeFiles": "backend/app/**"
+    }
+  }
+}

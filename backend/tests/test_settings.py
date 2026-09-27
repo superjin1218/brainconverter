@@ -31,4 +31,3 @@ def test_unsupported_region_is_explicitly_reported():
     assert settings["region"] == "USA"
     assert "region=CHN" in unresolved
     assert any("CHN" in warning for warning in warnings)
-

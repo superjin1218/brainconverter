@@ -16,7 +16,6 @@ const SETTING_LABELS = {
 const VALIDATION_LABELS = {
   jsonValid: "JSON 형식",
   schemaValid: "Strategy IR 스키마",
-  consensusPassed: "Agent 합의",
   sourceRequirementsPreserved: "원문 요구 보존",
   compilePassed: "FASTEXPR 컴파일",
 };
@@ -42,13 +41,32 @@ export class DashboardView {
   }
 
   render(result) {
-    this.root.querySelector("#expression-output").textContent = result.fastExpression;
-    this.root.querySelector("#metric-status").textContent = result.status;
-    this.root.querySelector("#metric-confidence").textContent = `${Math.round(result.confidence * 100)}%`;
+    const passed = result.status === "PASS";
+    const mock = result.provider === "mock";
+    const label = passed ? (mock ? "모의 변환 완료" : "변환 완료") : "변환 보류";
+    this.root.querySelector("#result-mode-note").textContent = mock
+      ? "모의 변환 결과입니다. 실제 AI를 사용하지 않았습니다. BRAIN 시뮬레이션은 수행하지 않습니다."
+      : "AI가 해석한 코드 초안입니다. BRAIN에서 직접 시뮬레이션하세요. 실행 성공이나 수익성을 확인한 결과가 아닙니다.";
+    this.root.querySelector("#expression-output").textContent = result.fastExpression || "검증을 통과하지 못해 코드를 생성하지 않았습니다.";
+    this.root.querySelector("[data-copy-target='expression-output']").disabled = !passed;
+    this.root.querySelector("#settings-copy").textContent = JSON.stringify(result.simulationSettings, null, 2);
+    this.root.querySelector("#metric-status").textContent = label;
+    this.root.querySelector("#metric-confidence").textContent = mock ? "모의 해석" : "AI 1회 해석";
     this.renderSettings(result.simulationSettings, result.settingsSource);
     this.renderValidation(result.validation);
     this.renderWarnings(result.warnings, result.unresolvedSettings);
+    const mapping = this.root.querySelector("#intent-mapping");
+    mapping.replaceChildren();
+    for (const item of result.intentMapping || []) {
+      const row = document.createElement("li");
+      row.textContent = `${item.requirement}: ${item.expression}`;
+      mapping.append(row);
+    }
     this.setState("content");
+    this.status.textContent = label;
+    if (!passed) {
+      this.status.className = "result-status error";
+    }
   }
 
   setState(state) {
@@ -57,7 +75,7 @@ export class DashboardView {
     this.content.hidden = state !== "content";
     this.error.hidden = state !== "error";
     const className = state === "content" ? "pass" : state === "error" ? "error" : "waiting";
-    const label = state === "loading" ? "해석 중" : state === "content" ? "PASS" : state === "error" ? "ERROR" : "대기";
+    const label = state === "loading" ? "해석 중" : state === "content" ? "변환 완료" : state === "error" ? "오류" : "대기";
     this.status.className = `result-status ${className}`;
     this.status.textContent = label;
   }
@@ -86,8 +104,8 @@ export class DashboardView {
     const list = this.root.querySelector("#validation-list");
     list.replaceChildren();
     for (const [key, passed] of Object.entries(validation)) {
-      if (!passed) continue;
       const item = document.createElement("li");
+      if (!passed) item.className = "failed";
       item.textContent = VALIDATION_LABELS[key] || key;
       list.append(item);
     }
@@ -111,11 +129,12 @@ export class DashboardView {
       const button = event.target.closest("[data-copy-target]");
       if (!button) return;
       const target = this.root.querySelector(`#${button.dataset.copyTarget}`);
-      await navigator.clipboard.writeText(target.textContent);
       const original = button.textContent;
-      button.textContent = "복사됨";
+      try {
+        await navigator.clipboard.writeText(target.textContent);
+        button.textContent = "복사됨";
+      } catch { button.textContent = "복사 권한을 확인하세요"; }
       setTimeout(() => { button.textContent = original; }, 1400);
     });
   }
 }
-

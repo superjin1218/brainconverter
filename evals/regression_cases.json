@@ -1,0 +1,602 @@
+[
+  {
+    "id": "case-001",
+    "strategy": "최근 2일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 2))"
+  },
+  {
+    "id": "case-002",
+    "strategy": "최근 2일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 2)), -1)"
+  },
+  {
+    "id": "case-003",
+    "strategy": "최근 2일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 2)), -1)"
+  },
+  {
+    "id": "case-004",
+    "strategy": "최근 2일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 2)), -1)"
+  },
+  {
+    "id": "case-005",
+    "strategy": "최근 2일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 2))"
+  },
+  {
+    "id": "case-006",
+    "strategy": "최근 2일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 2)), -1)"
+  },
+  {
+    "id": "case-007",
+    "strategy": "최근 2일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 2)), -1)"
+  },
+  {
+    "id": "case-008",
+    "strategy": "최근 2일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 2)), -1)"
+  },
+  {
+    "id": "case-009",
+    "strategy": "최근 3일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 3))"
+  },
+  {
+    "id": "case-010",
+    "strategy": "최근 3일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 3)), -1)"
+  },
+  {
+    "id": "case-011",
+    "strategy": "최근 3일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 3)), -1)"
+  },
+  {
+    "id": "case-012",
+    "strategy": "최근 3일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 3)), -1)"
+  },
+  {
+    "id": "case-013",
+    "strategy": "최근 3일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 3))"
+  },
+  {
+    "id": "case-014",
+    "strategy": "최근 3일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 3)), -1)"
+  },
+  {
+    "id": "case-015",
+    "strategy": "최근 3일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 3)), -1)"
+  },
+  {
+    "id": "case-016",
+    "strategy": "최근 3일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 3)), -1)"
+  },
+  {
+    "id": "case-017",
+    "strategy": "최근 5일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 5))"
+  },
+  {
+    "id": "case-018",
+    "strategy": "최근 5일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 5)), -1)"
+  },
+  {
+    "id": "case-019",
+    "strategy": "최근 5일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 5)), -1)"
+  },
+  {
+    "id": "case-020",
+    "strategy": "최근 5일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 5)), -1)"
+  },
+  {
+    "id": "case-021",
+    "strategy": "최근 5일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 5))"
+  },
+  {
+    "id": "case-022",
+    "strategy": "최근 5일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 5)), -1)"
+  },
+  {
+    "id": "case-023",
+    "strategy": "최근 5일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 5)), -1)"
+  },
+  {
+    "id": "case-024",
+    "strategy": "최근 5일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 5)), -1)"
+  },
+  {
+    "id": "case-025",
+    "strategy": "최근 7일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 7))"
+  },
+  {
+    "id": "case-026",
+    "strategy": "최근 7일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 7)), -1)"
+  },
+  {
+    "id": "case-027",
+    "strategy": "최근 7일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 7)), -1)"
+  },
+  {
+    "id": "case-028",
+    "strategy": "최근 7일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 7)), -1)"
+  },
+  {
+    "id": "case-029",
+    "strategy": "최근 7일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 7))"
+  },
+  {
+    "id": "case-030",
+    "strategy": "최근 7일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 7)), -1)"
+  },
+  {
+    "id": "case-031",
+    "strategy": "최근 7일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 7)), -1)"
+  },
+  {
+    "id": "case-032",
+    "strategy": "최근 7일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 7)), -1)"
+  },
+  {
+    "id": "case-033",
+    "strategy": "최근 10일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 10))"
+  },
+  {
+    "id": "case-034",
+    "strategy": "최근 10일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 10)), -1)"
+  },
+  {
+    "id": "case-035",
+    "strategy": "최근 10일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 10)), -1)"
+  },
+  {
+    "id": "case-036",
+    "strategy": "최근 10일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 10)), -1)"
+  },
+  {
+    "id": "case-037",
+    "strategy": "최근 10일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 10))"
+  },
+  {
+    "id": "case-038",
+    "strategy": "최근 10일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 10)), -1)"
+  },
+  {
+    "id": "case-039",
+    "strategy": "최근 10일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 10)), -1)"
+  },
+  {
+    "id": "case-040",
+    "strategy": "최근 10일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 10)), -1)"
+  },
+  {
+    "id": "case-041",
+    "strategy": "최근 15일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 15))"
+  },
+  {
+    "id": "case-042",
+    "strategy": "최근 15일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 15)), -1)"
+  },
+  {
+    "id": "case-043",
+    "strategy": "최근 15일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 15)), -1)"
+  },
+  {
+    "id": "case-044",
+    "strategy": "최근 15일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 15)), -1)"
+  },
+  {
+    "id": "case-045",
+    "strategy": "최근 15일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 15))"
+  },
+  {
+    "id": "case-046",
+    "strategy": "최근 15일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 15)), -1)"
+  },
+  {
+    "id": "case-047",
+    "strategy": "최근 15일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 15)), -1)"
+  },
+  {
+    "id": "case-048",
+    "strategy": "최근 15일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 15)), -1)"
+  },
+  {
+    "id": "case-049",
+    "strategy": "최근 20일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 20))"
+  },
+  {
+    "id": "case-050",
+    "strategy": "최근 20일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 20)), -1)"
+  },
+  {
+    "id": "case-051",
+    "strategy": "최근 20일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 20)), -1)"
+  },
+  {
+    "id": "case-052",
+    "strategy": "최근 20일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 20)), -1)"
+  },
+  {
+    "id": "case-053",
+    "strategy": "최근 20일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 20))"
+  },
+  {
+    "id": "case-054",
+    "strategy": "최근 20일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 20)), -1)"
+  },
+  {
+    "id": "case-055",
+    "strategy": "최근 20일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 20)), -1)"
+  },
+  {
+    "id": "case-056",
+    "strategy": "최근 20일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 20)), -1)"
+  },
+  {
+    "id": "case-057",
+    "strategy": "최근 30일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 30))"
+  },
+  {
+    "id": "case-058",
+    "strategy": "최근 30일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 30)), -1)"
+  },
+  {
+    "id": "case-059",
+    "strategy": "최근 30일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 30)), -1)"
+  },
+  {
+    "id": "case-060",
+    "strategy": "최근 30일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 30)), -1)"
+  },
+  {
+    "id": "case-061",
+    "strategy": "최근 30일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 30))"
+  },
+  {
+    "id": "case-062",
+    "strategy": "최근 30일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 30)), -1)"
+  },
+  {
+    "id": "case-063",
+    "strategy": "최근 30일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 30)), -1)"
+  },
+  {
+    "id": "case-064",
+    "strategy": "최근 30일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 30)), -1)"
+  },
+  {
+    "id": "case-065",
+    "strategy": "최근 60일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 60))"
+  },
+  {
+    "id": "case-066",
+    "strategy": "최근 60일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 60)), -1)"
+  },
+  {
+    "id": "case-067",
+    "strategy": "최근 60일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 60)), -1)"
+  },
+  {
+    "id": "case-068",
+    "strategy": "최근 60일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 60)), -1)"
+  },
+  {
+    "id": "case-069",
+    "strategy": "최근 60일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 60))"
+  },
+  {
+    "id": "case-070",
+    "strategy": "최근 60일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 60)), -1)"
+  },
+  {
+    "id": "case-071",
+    "strategy": "최근 60일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 60)), -1)"
+  },
+  {
+    "id": "case-072",
+    "strategy": "최근 60일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 60)), -1)"
+  },
+  {
+    "id": "case-073",
+    "strategy": "최근 120일 동안 가격이 가장 많이 떨어진 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(-ts_delta(close, 120))"
+  },
+  {
+    "id": "case-074",
+    "strategy": "최근 120일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 120)), -1)"
+  },
+  {
+    "id": "case-075",
+    "strategy": "최근 120일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(-ts_delta(close, 120)), -1)"
+  },
+  {
+    "id": "case-076",
+    "strategy": "최근 120일 동안 가격이 가장 많이 떨어진 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(-ts_delta(close, 120)), -1)"
+  },
+  {
+    "id": "case-077",
+    "strategy": "최근 120일 동안 가격이 가장 많이 오른 종목을 매수한다.",
+    "status": "PASS",
+    "expression": "rank(ts_delta(close, 120))"
+  },
+  {
+    "id": "case-078",
+    "strategy": "최근 120일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(ts_delta(close, 120)), -1)"
+  },
+  {
+    "id": "case-079",
+    "strategy": "최근 120일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 30일 평균의 2배 초과일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume > 2 * ts_mean(volume, 30), rank(ts_delta(close, 120)), -1)"
+  },
+  {
+    "id": "case-080",
+    "strategy": "최근 120일 동안 가격이 가장 많이 오른 종목을 매수한다. 거래량이 최근 60일 평균의 3배 이하일 때만 거래한다. TOP500, Delay 1, Decay 4, Truncation 0.08.",
+    "status": "PASS",
+    "expression": "trade_when(volume <= 3 * ts_mean(volume, 60), rank(ts_delta(close, 120)), -1)"
+  },
+  {
+    "id": "case-081",
+    "strategy": "PER이 낮은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-082",
+    "strategy": "PBR이 낮은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-083",
+    "strategy": "ROE가 높은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-084",
+    "strategy": "EPS 증가율이 높은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-085",
+    "strategy": "순이익 증가율이 높은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-086",
+    "strategy": "매출 성장률이 높은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-087",
+    "strategy": "뉴스 점수가 높은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-088",
+    "strategy": "감성 지표가 높은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-089",
+    "strategy": "5일 수익률과 20일 거래량을 같은 비중으로 결합한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-090",
+    "strategy": "5일 이동평균이 20일 이동평균을 교차하면 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-091",
+    "strategy": "최근 5일 하락 종목을 매수하고 3%에서 손절한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-092",
+    "strategy": "최근 5일 하락 종목을 매수하고 5%에서 익절한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-093",
+    "strategy": "내일 가격이 오르는 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-094",
+    "strategy": "미래 수익률이 높은 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-095",
+    "strategy": "가격이 높은 상위 10개 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-096",
+    "strategy": "가격이 낮은 하위 20개 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-097",
+    "strategy": "중국 시장의 최근 5일 하락 종목을 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-098",
+    "strategy": "최근 5일 하락 종목을 TOP999에서 매수한다.",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-099",
+    "strategy": "최근 5일 하락 종목, Delay 2",
+    "status": "REJECTED",
+    "expression": null
+  },
+  {
+    "id": "case-100",
+    "strategy": "최근 5일 하락 종목, Decay 999",
+    "status": "REJECTED",
+    "expression": null
+  }
+]

@@ -1,33 +1,23 @@
-# 아키텍처
+# 현재 구조 (2026-09-27)
 
-```text
-회원 브라우저
-  → Cloudflare Access
-  → Cloudflare Worker Gateway
-      - 회원 이메일 확인
-      - 사용자별 일일 쿼터
-      - Cloud Run 요청 HMAC 서명
-  → FastAPI / FE-Harness
-      - 6개 semantic agent 병렬 호출
-      - Strategy IR 필드별 합의
-      - source guard와 schema 검증
-      - 결정론적 FASTEXPR 컴파일
-      - 전체 시뮬레이션 설정 해석
-  → 검증된 JSON 반환
-```
+브라우저 → Vercel FastAPI → Supabase Auth 신원 확인 → DB 승인·쿼터 확인 → Muse Spark 1.3 Contributor 1회 → Python 검사·컴파일 → FASTEXPR + 12개 설정.
 
-## 신뢰 경계
+## 해석과 생성
 
-브라우저는 모델 공급자와 직접 통신하지 않습니다. 모델 키는 Cloud Run Secret에만 있고 Gateway는 별도의 공유 비밀값으로 Cloud Run 요청을 서명합니다. Cloud Run은 운영 환경에서 유효한 Gateway 서명이 없는 변환 요청을 거부합니다.
+`backend/app/skills/brain-strategy/SKILL.md`의 본문이 모델 시스템 지침입니다. 모델은 StrategyIR JSON을 반환하며 최종 코드는 Python 컴파일러가 생성합니다. 기존 숫자·방향·필터·원문 보존 검사는 유지합니다. 다수결·합의율·병렬 에이전트 호출은 실행하지 않습니다. confidence는 호환 필드로 null이며 모델 품질 점수가 아닙니다.
 
-## 데이터 정책
+Gateway Chat Completions에 모델과 Meta 제공자를 고정합니다. `OPENAI_API_KEY`는 읽지 않습니다. 출력 최대 1,024토큰, 요청 1회, 자동 재시도 없음, 모델 타임아웃 최대 35초입니다.
 
-- 전략 원문과 완성 코드는 영구 저장하지 않습니다.
-- 운영 로그에는 요청 ID, 사용자 해시, 상태 코드, 지연시간만 남깁니다.
-- BRAIN 자격증명과 세션 정보는 입력받지 않습니다.
-- 향후 학습 데이터 수집은 별도의 명시적 동의와 보관 기간을 도입한 뒤에만 추가합니다.
+## 인증과 권한
 
-## 장애 정책
+FastAPI가 Supabase password Auth를 중계하고 access/refresh 토큰을 HttpOnly 쿠키에만 담습니다. 클라이언트에는 사용자 이메일·이름·승인 상태·역할만 반환합니다. 변환 및 운영자 API마다 원격 getUser로 신원을 확인하고 DB 함수로 상태·역할을 조회합니다. 회원가입 metadata는 이름만 저장하며 권한으로 신뢰하지 않습니다.
 
-모델 호출은 40초 timeout, 1회 재시도, 최대 동시 하네스 작업 2개를 기본으로 합니다. 검증 단계가 하나라도 실패하면 임의 코드를 반환하지 않고 구조화된 오류를 반환합니다.
+가입자는 이메일 인증 후에도 pending입니다. approved만 변환하며 approved/admin만 회원 관리가 가능합니다. 쿠키 변경·변환·회원 변경에는 동일 Origin과 고정 요청 헤더를 요구합니다. 운영자 본인·다른 운영자의 상태는 회원 화면에서 변경할 수 없습니다.
 
+## DB 사용량과 중복 요청
+
+private 스키마 테이블은 RLS를 켜고 anon/authenticated의 직접 접근을 철회합니다. 고정 search_path의 SECURITY DEFINER 함수는 명시적으로 자신의 신원·승인·운영자 여부를 검사합니다. 서버 전용 함수는 service_role만 실행합니다.
+
+서버는 검증한 사용자 ID와 요청 해시를 예약 함수에 전달합니다. 전역 advisory transaction lock으로 쿼터 확인과 삽입을 직렬화합니다. UUID 요청 ID 재사용은 본인·동일 입력에만 가능하며 진행 조회 또는 24시간 내 완료 결과를 반환합니다. 다른 입력·사용자의 ID는 충돌 처리합니다. 실패·만료 요청은 자동 새 호출하지 않습니다.
+
+설정 파일·모델 키는 서버에서만 읽습니다. 과거 Cloudflare HMAC·Gateway 코드는 기록으로 남아 있지만 현재 회원 화면과 연결된 지원 배포 방식이 아닙니다. 이전 클라우드 배포 workflow도 비활성화했으며 Vercel/Supabase 운영 구성에는 사용하지 않습니다.

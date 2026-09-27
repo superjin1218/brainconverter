@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -11,6 +11,17 @@ class AppConfig:
     gateway_shared_secret: str
     allowed_emails: frozenset[str]
     static_directory: Path
+    auth_mode: str = "gateway"
+    supabase_url: str = ""
+    supabase_publishable_key: str = ""
+    supabase_secret_key: str = field(default="", repr=False)
+    public_url: str = ""
+
+    def __post_init__(self) -> None:
+        if self.auth_mode not in {"none", "gateway", "supabase"}:
+            raise ValueError("AUTH_MODE 설정을 확인하세요.")
+        if self.is_production and self.auth_mode == "none":
+            raise ValueError("운영 환경에서는 인증을 비활성화할 수 없습니다.")
 
     @property
     def is_production(self) -> bool:
@@ -23,10 +34,15 @@ class AppConfig:
             for email in os.getenv("ALLOWED_EMAILS", "").split(",")
             if email.strip()
         )
+        environment = os.getenv("APP_ENV", "development").lower()
         return cls(
-            environment=os.getenv("APP_ENV", "development").lower(),
+            environment=environment,
             gateway_shared_secret=os.getenv("GATEWAY_SHARED_SECRET", ""),
             allowed_emails=emails,
             static_directory=Path(__file__).resolve().parent / "static",
+            auth_mode=os.getenv("AUTH_MODE", "supabase"),
+            supabase_url=os.getenv("SUPABASE_URL", "").rstrip("/"),
+            supabase_publishable_key=os.getenv("SUPABASE_PUBLISHABLE_KEY", ""),
+            supabase_secret_key=os.getenv("SUPABASE_SECRET_KEY", ""),
+            public_url=os.getenv("APP_PUBLIC_URL", "").rstrip("/"),
         )
-

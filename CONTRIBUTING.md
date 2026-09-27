@@ -3,12 +3,13 @@
 ## 모듈 경계
 
 - `provider.py`: 모델 공급자 호출과 응답 역직렬화만 담당합니다.
-- `service.py`: agent 실행, 합의, 검증 순서를 조정합니다.
+- `service.py`: 단일 모델 해석, 원문 검사, 컴파일 순서를 조정합니다.
 - `compiler.py`: Strategy IR을 FASTEXPR로 바꾸는 순수 함수만 둡니다.
 - `settings.py`: BRAIN 설정 기본값과 명시값 해석만 담당합니다.
-- `security.py`: Gateway 서명과 사용자 허용 여부만 검증합니다.
+- `membership.py`: Supabase 로그인·HttpOnly 세션·회원 승인·DB 호출을 담당합니다.
+- `security.py`: 요청 크기 제한과 이전 Gateway 모드의 서명을 검증합니다.
 - `main.py`: 애플리케이션 조립과 HTTP route만 정의합니다.
-- 프론트엔드는 API, 폼, 결과 렌더링, WebMCP를 서로 다른 모듈로 유지합니다.
+- 프론트엔드는 API, 폼, 회원 상태, 키 설정, 결과 렌더링, WebMCP를 서로 다른 모듈로 유지합니다.
 
 ## 변경 규칙
 
@@ -24,11 +25,14 @@
 ## 완료 조건
 
 ```bash
-pytest -q
-ruff check backend
-npm --prefix gateway run check
-node --check backend/app/static/js/app.js
+make test
+make lint
+make test-frontend
+make test-sql  # Docker로 임시 PostgreSQL에서 검증
+cd gateway    # 이전 Gateway 변경이 있을 때만; Node.js 22 이상
+npm run check
+npm test
+npm run build # dry-run, 배포하지 않음
 ```
 
-네 검사가 모두 통과하고, 새 코드가 기존 모듈의 책임을 침범하지 않아야 완료입니다.
-
+변경 범위의 검사가 모두 통과하고, 새 코드가 기존 모듈의 책임을 침범하지 않아야 완료입니다. 실제 Muse 호출과 외부 계정 테스트 결과는 오프라인 검증과 별도로 기록합니다.

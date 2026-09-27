@@ -8,4 +8,8 @@ __pycache__
 *.pyc
 .env
 .env.local
-
+.env.*
+.vercel
+.deploy.env
+gateway
+artifacts

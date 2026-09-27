@@ -8,6 +8,8 @@ permissions:
 
 jobs:
   deploy:
+    # Archived: the current member website does not use this Gateway.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -21,6 +23,7 @@ jobs:
           cache-dependency-path: gateway/package-lock.json
       - run: npm ci
       - run: npm run check
+      - run: npm test
       - run: npm run deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

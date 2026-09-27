@@ -19,7 +19,10 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - run: ruff check backend
+      - run: docker pull postgres:16-alpine
       - run: pytest -q
+        env:
+          RUN_SQL_TESTS: "1"
 
   gateway:
     runs-on: ubuntu-latest
@@ -35,6 +38,8 @@ jobs:
           cache-dependency-path: gateway/package-lock.json
       - run: npm ci
       - run: npm run check
+      - run: npm test
+      - run: npm run build
 
   frontend:
     runs-on: ubuntu-latest
@@ -48,3 +53,4 @@ jobs:
           for js_file in backend/app/static/js/*.js; do
             node --input-type=module --check < "$js_file"
           done
+      - run: node --test backend/tests/frontend_state.test.mjs

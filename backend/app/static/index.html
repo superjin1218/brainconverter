@@ -17,13 +17,97 @@
         <span class="brand-mark" aria-hidden="true">α</span>
         <span>
           <b>BRAIN Alpha Harness</b>
-          <small>Natural language → verified FASTEXPR</small>
+          <small>Natural language → FASTEXPR draft</small>
         </span>
       </a>
-      <span class="status-chip"><i aria-hidden="true"></i> 검증형 컴파일러</span>
+      <div class="topbar-actions">
+        <span id="account-label" class="account-label"></span>
+        <button id="auth-logout" class="copy-button" type="button" hidden>로그아웃</button>
+        <span id="provider-chip" class="status-chip" hidden>코드 변환 도구</span>
+        <button id="open-settings" class="settings-button" type="button"
+          aria-haspopup="dialog" aria-controls="provider-dialog" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="m9 3-.6 2.2-2 .9-2.1-.6-2 3.5 1.5 1.7v2.6L2.3 15l2 3.5 2.1-.6 2 .9L9 21h4l.6-2.2 2-.9 2.1.6 2-3.5-1.5-1.7v-2.6L19.7 9l-2-3.5-2.1.6-2-.9L13 3Z" />
+            <circle cx="11" cy="12" r="3" />
+          </svg>
+          <span>설정</span>
+        </button>
+      </div>
     </header>
 
-    <main class="workspace">
+    <dialog id="provider-dialog" class="settings-dialog" aria-labelledby="settings-title">
+      <div class="dialog-heading">
+        <h2 id="settings-title">설정</h2>
+        <button id="close-settings" class="dialog-close" type="button" aria-label="설정 닫기">×</button>
+      </div>
+      <section id="local-provider-panel" class="provider-panel" aria-labelledby="provider-title" hidden>
+          <div class="provider-heading">
+            <h3 id="provider-title">Vercel AI Gateway 키 연결</h3>
+            <span id="provider-mode" class="provider-mode">연결 확인 중</span>
+          </div>
+          <p id="provider-description"></p>
+          <div class="provider-budget">
+            <div><span>허용 모델</span><b id="provider-model">연결 확인 중</b></div>
+            <p>이 프로그램은 지정된 저가 모델만 사용하며 비싼 모델로 자동 전환하지 않습니다.</p>
+            <p>변환 한 번에 AI를 1회 호출합니다. 오류가 나도 자동으로 재시도하지 않습니다.</p>
+          </div>
+          <form id="provider-form" autocomplete="off">
+            <label for="openai-api-key">Vercel AI Gateway API 키</label>
+            <div class="provider-input-row">
+              <input id="openai-api-key" type="password" placeholder="AI Gateway에서 발급한 키" required
+                minlength="16" maxlength="1024" autocomplete="new-password" spellcheck="false"
+                aria-describedby="provider-key-note" />
+              <button id="connect-provider" class="connect-button" type="submit">키 연결</button>
+            </div>
+          </form>
+          <p id="provider-key-note" class="provider-note">키는 이 로컬 서버의 메모리에서만 사용합니다. 연결을 해제하거나 서버를 재시작하면 입력한 키가 해제됩니다.</p>
+          <p id="provider-feedback" class="provider-feedback" role="status" aria-live="polite"></p>
+          <button id="disconnect-provider" class="copy-button" type="button" hidden>연결 해제 · 모의 모드로 전환</button>
+      </section>
+      <div class="dialog-footer">
+        <button id="done-settings" class="copy-button" type="button">닫기</button>
+      </div>
+    </dialog>
+
+    <section id="auth-panel" class="auth-shell" aria-labelledby="auth-title">
+      <div id="auth-login-card" class="auth-card">
+        <p class="eyebrow">Q-LAB MEMBERS</p>
+        <h1 id="auth-title">전략을 코드로,<br />함께 시작하세요.</h1>
+        <p class="auth-description">자연어로 작성한 퀀트 전략을 BRAIN 코드로 변환합니다.<br />회원가입 후 운영자 승인을 받으면 이용할 수 있습니다.</p>
+        <div class="auth-tabs">
+          <button id="auth-login-tab" type="button" aria-pressed="true">로그인</button>
+          <button id="auth-signup-tab" type="button" aria-pressed="false">회원가입</button>
+        </div>
+        <form id="auth-form">
+          <div id="auth-name-row" hidden>
+            <label for="auth-name">이름</label>
+            <input id="auth-name" type="text" maxlength="80" autocomplete="name" placeholder="운영자가 확인할 이름" />
+          </div>
+          <label for="auth-email">이메일</label>
+          <input id="auth-email" type="email" required maxlength="320" autocomplete="username" placeholder="you@example.com" />
+          <label for="auth-password">비밀번호</label>
+          <input id="auth-password" type="password" required maxlength="256" autocomplete="current-password" placeholder="비밀번호" />
+          <button id="auth-submit" class="primary-button" type="submit">로그인</button>
+        </form>
+      </div>
+      <div id="auth-waiting-card" class="auth-card" hidden>
+        <p class="eyebrow">MEMBERSHIP STATUS</p>
+        <h2 id="auth-member-status">운영자 승인을 기다리고 있습니다</h2>
+        <p id="auth-member-email" class="auth-description"></p>
+        <p>운영자가 가입 신청을 확인하면 전략 변환을 이용할 수 있습니다.</p>
+        <button id="auth-refresh" class="copy-button" type="button">승인 상태 확인</button>
+      </div>
+      <p id="auth-feedback" class="auth-feedback" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="member-admin-panel" class="member-admin" hidden aria-labelledby="members-title">
+      <div class="block-head"><h2 id="members-title">회원 승인 관리</h2><button id="members-refresh" class="copy-button" type="button">새로고침</button></div>
+      <p class="auth-note">이메일 인증을 마친 회원을 승인하거나 이용을 중지할 수 있습니다.</p>
+      <p id="members-feedback" role="status"></p>
+      <div id="members-list"></div>
+    </section>
+
+    <main id="dashboard" class="workspace" hidden>
       <section class="composer" aria-labelledby="composer-title">
         <div class="section-head">
           <div>
@@ -85,24 +169,38 @@
           </details>
 
           <div class="submit-row">
-            <p><b>하루 20회</b>까지 사용할 수 있습니다.</p>
+            <p id="quota-status" aria-live="polite">사용량 확인 중…</p>
             <button id="submit-button" type="submit">
               <span>전략 변환하기</span><span aria-hidden="true">→</span>
             </button>
           </div>
+          <label id="training-notice" class="training-notice">
+            <input id="training-consent" type="checkbox" />
+            <span>Muse Spark Contributor는 입력 전략과 응답을 Meta의 모델 학습에 사용합니다. 이 조건을 확인하고 변환에 동의합니다.</span>
+          </label>
+          <button id="refresh-usage" class="copy-button" type="button">남은 횟수 확인</button>
         </form>
 
         <aside class="privacy-note">
           <b>BRAIN 계정정보를 입력하지 마세요.</b>
           <span>이 서비스는 표현식과 설정만 만들며 로그인·시뮬레이션·제출을 수행하지 않습니다.</span>
         </aside>
+        <aside class="privacy-note">
+          <b>현재 지원: 가격 변화·수익률 순위·평균 거래량 조건</b>
+          <span>복합 신호, 재무지표, 손절·익절은 아직 지원하지 않습니다. 회원 서비스에서는 같은 요청을 24시간 동안 재사용합니다.</span>
+        </aside>
+        <details id="admin-panel" class="settings-panel" hidden>
+          <summary>운영진 사용 현황</summary>
+          <button id="refresh-admin" class="copy-button" type="button">새로고침</button>
+          <pre id="admin-usage"></pre>
+        </details>
       </section>
 
       <section class="result" aria-labelledby="result-title" aria-live="polite">
         <div class="section-head">
           <div>
             <p class="eyebrow">COMPILED OUTPUT</p>
-            <h2 id="result-title">검증 결과</h2>
+            <h2 id="result-title">코드 변환 결과</h2>
           </div>
           <span id="result-status" class="result-status waiting">대기</span>
         </div>
@@ -110,33 +208,41 @@
         <div id="result-empty" class="empty-state">
           <span class="empty-symbol" aria-hidden="true">{ }</span>
           <h3>전략을 입력하면 여기에 결과가 표시됩니다</h3>
-          <p>FASTEXPR, 전체 시뮬레이션 설정, 합의 신뢰도와 경고를 함께 확인할 수 있습니다.</p>
+          <p>FASTEXPR, 전체 시뮬레이션 설정과 코드 변환 점검 결과를 함께 확인할 수 있습니다.</p>
         </div>
 
         <div id="result-loading" class="loading-state" hidden>
           <div class="loader" aria-hidden="true"></div>
-          <div><b>6개 semantic agent가 전략을 해석하고 있습니다</b><span>합의와 컴파일 검증까지 최대 40초 정도 걸릴 수 있습니다.</span></div>
+          <div><b>전략을 해석하고 코드를 만들고 있습니다</b><span>실제 AI 응답에는 최대 1분 정도 걸릴 수 있습니다.</span></div>
         </div>
 
         <div id="result-content" hidden>
+          <p id="result-mode-note" class="result-mode-note"></p>
           <article class="expression-card">
-            <div class="card-label"><span>FINAL FAST EXPRESSION</span><button class="copy-button" data-copy-target="expression-output" type="button">복사</button></div>
+            <div class="card-label"><span>FASTEXPR 초안</span><button class="copy-button" data-copy-target="expression-output" type="button">복사</button></div>
             <code id="expression-output"></code>
           </article>
 
           <div class="metrics">
-            <div><small>STATUS</small><b id="metric-status">—</b></div>
-            <div><small>CONSENSUS</small><b id="metric-confidence">—</b></div>
+            <div><small>변환 상태</small><b id="metric-status">—</b></div>
+            <div><small>변환 방식</small><b id="metric-confidence">—</b></div>
             <div><small>SETTINGS</small><b>12 / 12</b></div>
           </div>
 
           <div class="result-block">
             <div class="block-head"><h3>Simulation Settings</h3><span>기본값과 사용자 지정을 구분합니다</span></div>
             <div id="settings-grid" class="settings-grid"></div>
+            <button class="copy-button" data-copy-target="settings-copy" type="button">전체 설정 복사</button>
+            <pre id="settings-copy" hidden></pre>
           </div>
 
           <div class="result-block">
-            <div class="block-head"><h3>Validation</h3><span>모든 단계를 통과한 코드만 표시합니다</span></div>
+            <div class="block-head"><h3>조건과 코드 대응</h3></div>
+            <ul id="intent-mapping"></ul>
+          </div>
+
+          <div class="result-block">
+            <div class="block-head"><h3>코드 변환 점검</h3><span>BRAIN 실행·수익성 검증은 포함하지 않습니다</span></div>
             <ul id="validation-list" class="validation-list"></ul>
           </div>
 

@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   deploy:
+    # Archived: this version uses Vercel + Supabase, not the former OpenAI backend.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -17,20 +19,30 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
       - uses: google-github-actions/setup-gcloud@v2
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check backend && pytest -q
       - name: Build container
         run: >-
           gcloud builds submit
+          --project "${{ vars.GCP_PROJECT_ID }}"
           --tag "${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/brain-alpha/harness:${{ github.sha }}"
       - name: Deploy service
         run: >-
           gcloud run deploy "${{ vars.GCP_SERVICE }}"
+          --project "${{ vars.GCP_PROJECT_ID }}"
           --image "${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/brain-alpha/harness:${{ github.sha }}"
           --region "${{ vars.GCP_REGION }}"
           --platform managed
           --allow-unauthenticated
           --min 0
           --max 2
-          --concurrency 20
+          --concurrency 2
+          --timeout 65
+          --cpu-throttling
+          --service-account "brain-alpha-runtime@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
           --memory 512Mi
           --cpu 1
           --set-env-vars "APP_ENV=production,HARNESS_PROVIDER=openai,OPENAI_MODEL=gpt-5-mini,MAX_CONCURRENT_JOBS=2"

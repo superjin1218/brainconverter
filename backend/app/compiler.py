@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 
 from .models import EntryIR, SignalIR, StrategyIR
 
@@ -30,10 +31,7 @@ def compile_entry(entry: EntryIR) -> str | None:
     if entry.reference != "ts_mean" or entry.comparator == "none":
         raise ValueError("지원하지 않는 진입 조건입니다.")
     multiplier = _format_number(entry.multiplier)
-    return (
-        f"{entry.field} {entry.comparator} "
-        f"{multiplier} * ts_mean({entry.field}, {entry.window})"
-    )
+    return f"{entry.field} {entry.comparator} {multiplier} * ts_mean({entry.field}, {entry.window})"
 
 
 def compile_fe(ir: StrategyIR) -> str:
@@ -60,7 +58,9 @@ def source_guards(strategy: str, ir: StrategyIR) -> list[str]:
                 errors.append(f"명시한 {expected} 중립화가 보존되지 않았습니다.")
             break
 
-    if ("거래량" in lower or "volume" in lower) and not ir.entry.enabled:
+    if ("거래량" in lower or "volume" in lower) and not (
+        ir.entry.enabled or ir.signal.field == "volume"
+    ):
         errors.append("명시한 거래량 필터가 보존되지 않았습니다.")
 
     downside_phrases = (
@@ -75,10 +75,57 @@ def source_guards(strategy: str, ir: StrategyIR) -> list[str]:
         if ir.signal.direction != "down" or ir.signal.selection != "relative":
             errors.append("상대적 하락 신호의 방향 또는 선택 방식이 보존되지 않았습니다.")
 
+    if re.search(r"순위|\brank(?:ing)?\b", lower) and ir.signal.selection != "relative":
+        errors.append("명시한 상대 순위가 보존되지 않았습니다.")
+
     comparator_map = {"이상": ">=", "초과": ">", "이하": "<=", "미만": "<"}
     for token, expected in comparator_map.items():
         if token in lower and ir.entry.enabled and ir.entry.comparator != expected:
             errors.append(f"'{token}'은 '{expected}'로 보존되어야 합니다.")
+
+    if re.search(
+        r"(?<![a-z])(per|pbr|roe|eps|fundamental|news|sentiment)(?![a-z])|"
+        r"재무|순이익|매출|뉴스|감성|동일\s*비중|같은\s*비중|가중\s*합|"
+        r"손절|익절|청산|이동평균.*교차|미래|내일|equal.weight|stop.loss|take.profit",
+        lower,
+    ):
+        errors.append("현재 지원 범위 밖의 데이터·신호 조합·청산 조건이 있습니다.")
+    if re.search(r"\d+(?:\.\d+)?\s*%|상위\s*\d+|하위\s*\d+", lower):
+        errors.append("퍼센트 수익률·임계값·상하위 개수 조건은 현재 지원하지 않습니다.")
+
+    # Bind explicit windows to their semantic slot, not a coincidental number in another slot.
+    signal_window = re.search(
+        r"(?:최근\s*)?(\d+)\s*일\s*(?:동안|간)?\s*(?:가격|종가|하락|상승)", lower
+    )
+    if signal_window and (
+        ir.signal.operation != "delta" or ir.signal.window != int(signal_window.group(1))
+    ):
+        errors.append("명시한 가격 변화 기간이 보존되지 않았습니다.")
+    entry_window = re.search(r"(?:최근\s*)?(\d+)\s*일\s*평균", lower)
+    if entry_window and (not ir.entry.enabled or ir.entry.window != int(entry_window.group(1))):
+        errors.append("명시한 평균 거래량 기간이 보존되지 않았습니다.")
+    if entry_window and ("거래량" in lower or "volume" in lower) and ir.entry.field != "volume":
+        errors.append("거래량 조건의 데이터가 보존되지 않았습니다.")
+    multiplier = re.search(r"(\d+(?:\.\d+)?)\s*배", lower)
+    if multiplier and (
+        not ir.entry.enabled or Decimal(str(ir.entry.multiplier)) != Decimal(multiplier.group(1))
+    ):
+        errors.append("명시한 거래량 배수가 보존되지 않았습니다.")
+
+    signal_text = re.split(r"거래량|volume", lower)[0] if ir.signal.field != "volume" else lower
+    if re.search(r"하락|떨어|낮은\s*수익률|수익률이\s*낮", signal_text):
+        if ir.signal.direction != "down":
+            errors.append("명시한 하락 방향이 보존되지 않았습니다.")
+    if re.search(r"상승|오른|오르|높은\s*수익률|수익률이\s*높", signal_text):
+        if ir.signal.direction != "up":
+            errors.append("명시한 상승 방향이 보존되지 않았습니다.")
+    if "수익률" in signal_text and ir.signal.field != "returns":
+        errors.append("수익률 신호가 다른 데이터로 바뀌었습니다.")
+    return_window = re.search(r"(\d+)\s*일\s*(?:누적\s*)?수익률", signal_text)
+    if return_window and int(return_window.group(1)) != 1:
+        errors.append("여러 날의 누적 수익률 신호는 현재 지원하지 않습니다.")
+    if re.search(r"(?:가격|종가)", signal_text) and ir.signal.field != "close":
+        errors.append("가격 신호가 다른 데이터로 바뀌었습니다.")
 
     return errors
 
@@ -89,7 +136,12 @@ def validate_compiled_fe(strategy: str, ir: StrategyIR, expression: str) -> list
         expected = f"ts_delta({ir.signal.field}, {ir.signal.window})"
         if expected not in expression:
             errors.append("시계열 변화 신호가 컴파일 결과에서 사라졌습니다.")
-    if ir.signal.direction == "down" and "-ts_delta(" not in expression:
+    base_signal = (
+        f"ts_delta({ir.signal.field}, {ir.signal.window})"
+        if ir.signal.operation == "delta"
+        else ir.signal.field
+    )
+    if ir.signal.direction == "down" and f"-{base_signal}" not in expression:
         errors.append("하락 방향이 컴파일 결과에서 사라졌습니다.")
     if ir.signal.selection == "relative" and "rank(" not in expression:
         errors.append("상대 순위가 컴파일 결과에서 사라졌습니다.")
@@ -98,15 +150,23 @@ def validate_compiled_fe(strategy: str, ir: StrategyIR, expression: str) -> list
 
     # 설정 숫자(예: TOP3000, Delay 1)는 FE에 들어가지 않으므로 제외한다.
     strategy_without_settings = re.sub(
-        r"(?i)(top\s*\d+|delay\s*[:=]?\s*[01]|딜레이\s*[:=]?\s*[01]|"
-        r"decay\s*[:=]?\s*\d+|truncation\s*[:=]?\s*0?\.\d+|"
+        r"(?i)(top\s*\d+|delay\s*[:=]?\s*[01]|딜레이\s*[:=]?\s*[01]|\bD[01]\b|"
+        r"(?:decay|디케이)\s*[:=]?\s*\d+|(?:truncation|트런케이션)\s*[:=]?\s*\d+(?:\.\d+)?|"
         r"(?:test\s*period|테스트\s*기간)\s*[:=]?\s*\d+\s*(?:년|y(?:ears?)?)"
         r"(?:\s*\d+\s*(?:개월|m(?:onths?)?))?)",
         "",
         strategy,
     )
-    for number in re.findall(r"(?<!\w)\d+(?:\.\d+)?", strategy_without_settings):
-        normalized = number[:-2] if number.endswith(".0") else number
-        if normalized not in expression:
+    numbers = {Decimal(n) for n in re.findall(r"(?<![\w.])\d+(?:\.\d+)?", expression)}
+    for number in re.findall(r"(?<![\d.])\d+(?:\.\d+)?", strategy_without_settings):
+        if Decimal(number) not in numbers:
             errors.append(f"전략의 숫자 {number}이 컴파일 결과에서 사라졌습니다.")
     return errors
+
+
+def intent_mapping(ir: StrategyIR) -> list[dict[str, str]]:
+    mapping = [{"requirement": "신호 · 방향 · 상대 순위", "expression": compile_signal(ir.signal)}]
+    condition = compile_entry(ir.entry)
+    if condition:
+        mapping.append({"requirement": "거래량 진입 조건", "expression": condition})
+    return mapping
