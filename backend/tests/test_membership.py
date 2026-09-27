@@ -45,7 +45,12 @@ def test_default_development_site_requires_login_before_provider_initialization(
 def test_authentication_bypass_requires_explicit_development_setting(monkeypatch):
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.setenv("AUTH_MODE", "none")
-    client = TestClient(create_app(provider_factory=MockSemanticProvider))
+    client = TestClient(
+        create_app(provider_factory=MockSemanticProvider),
+        base_url="http://127.0.0.1",
+        client=("127.0.0.1", 50000),
+        headers={"origin": "http://127.0.0.1", "x-requested-with": "brain-site"},
+    )
     assert client.get("/api/auth/config").json()["enabled"] is False
     assert client.post("/api/convert", json={"strategy": STRATEGY}).status_code == 200
 
@@ -86,6 +91,7 @@ def site():
         "cached": None,
         "finishFails": False,
         "queuePosition": 3,
+        "budget": "reserved",
     }
     config = AppConfig(
         environment="production",
@@ -138,10 +144,15 @@ def site():
                     "displayName": "테스트 회원",
                 },
             )
-        if path.endswith(("/brain_reserve", "/brain_finish", "/brain_job")):
+        if path.endswith(
+            ("/brain_reserve", "/brain_finish", "/brain_job", "/brain_budget_reserve")
+        ):
             assert request.headers["apikey"] == SECRET
             assert "authorization" not in request.headers
             assert payload["p_user_id"] == USER_ID
+            if path.endswith("/brain_budget_reserve"):
+                assert len(payload["p_request_hash"]) == 64
+                return httpx.Response(200, json={"state": state["budget"]})
             if path.endswith("/brain_reserve"):
                 return httpx.Response(
                     200,
@@ -166,6 +177,8 @@ def site():
             )
         if path.endswith("/brain_members"):
             return httpx.Response(200, json=[])
+        if path.endswith("/brain_budget_status"):
+            return httpx.Response(200, json={"limitKrw": 20000, "accountedKrw": 4})
         if path.endswith("/brain_set_member_status"):
             return httpx.Response(200, json={"status": payload["p_status"]})
         if path.endswith("/brain_usage"):
@@ -204,6 +217,30 @@ def test_anonymous_and_spoofed_email_cannot_reach_ai(site):
     assert response.status_code == 401
     assert not state["calls"]
     assert state["aiCalls"] == 0
+
+
+def test_provider_status_requires_approval_and_never_exposes_or_calls_key(site, monkeypatch):
+    client, state, _ = site
+    monkeypatch.setenv("HARNESS_PROVIDER", "muse")
+    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
+    monkeypatch.setenv("AI_API_KEY", "server-only-fake-gateway-key")
+    assert client.get("/api/provider").status_code == 401
+    connect(client)
+    assert client.get("/api/provider").status_code == 403
+    state["status"] = "approved"
+    response = client.get("/api/provider")
+    assert response.status_code == 200
+    assert response.json() == {
+        "provider": "muse",
+        "model": "meta/muse-spark-1.3-contributor",
+        "keyConfigured": True,
+        "localKeyEntry": False,
+    }
+    assert "server-only-fake-gateway-key" not in response.text
+    assert state["aiCalls"] == 0
+    monkeypatch.delenv("AI_API_KEY")
+    assert client.get("/api/provider").json()["keyConfigured"] is False
 
 
 @pytest.mark.parametrize("status", ["pending", "rejected", "suspended"])
@@ -410,3 +447,39 @@ def test_production_auth_cannot_be_disabled(site):
     _, _, config = site
     with pytest.raises(ValueError, match="인증"):
         replace(config, auth_mode="none")
+
+
+@pytest.mark.parametrize("budget,code", [("budget_exhausted", 402), ("unavailable", 503)])
+def test_budget_stop_or_unavailable_ledger_prevents_any_paid_call(site, budget, code):
+    client, state, _ = site
+    state.update(status="approved", budget=budget)
+    connect(client)
+    result = convert(client)
+    assert result.status_code == code
+    assert state["aiCalls"] == 0
+    finish = [body for path, body in state["calls"] if path.endswith("brain_finish")]
+    assert finish[-1]["p_failed"] is True
+    assert SECRET not in result.text
+
+
+def test_budget_endpoint_requires_admin_and_never_returns_credentials(site):
+    client, state, _ = site
+    assert client.get("/api/admin/budget").status_code == 401
+    connect(client)
+    state.update(status="approved")
+    assert client.get("/api/admin/budget").status_code == 403
+    state["role"] = "admin"
+    response = client.get("/api/admin/budget")
+    assert response.status_code == 200
+    assert response.json()["limitKrw"] == 20000
+    assert SECRET not in response.text
+
+
+def test_vercel_automatically_uses_production_and_rejects_development(monkeypatch):
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("AUTH_MODE", "supabase")
+    monkeypatch.delenv("APP_ENV", raising=False)
+    assert AppConfig.from_environment().is_production
+    monkeypatch.setenv("APP_ENV", "development")
+    with pytest.raises(ValueError, match="Vercel"):
+        AppConfig.from_environment()

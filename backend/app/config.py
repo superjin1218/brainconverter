@@ -34,7 +34,10 @@ class AppConfig:
             for email in os.getenv("ALLOWED_EMAILS", "").split(",")
             if email.strip()
         )
-        environment = os.getenv("APP_ENV", "development").lower()
+        hosted = os.getenv("VERCEL") == "1" or os.getenv("VERCEL_ENV") in {"production", "preview"}
+        environment = os.getenv("APP_ENV", "production" if hosted else "development").lower()
+        if hosted and environment != "production":
+            raise ValueError("Vercel에서는 APP_ENV=production으로 설정하세요.")
         return cls(
             environment=environment,
             gateway_shared_secret=os.getenv("GATEWAY_SHARED_SECRET", ""),

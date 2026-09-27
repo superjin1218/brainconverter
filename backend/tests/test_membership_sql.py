@@ -91,7 +91,9 @@ def db():
     try:
         deadline = time.monotonic() + 20
         while subprocess.run(
-            ["docker", "exec", name, "pg_isready", "-U", "postgres"], capture_output=True, timeout=5
+            ["docker", "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"],
+            capture_output=True,
+            timeout=5,
         ).returncode:
             if time.monotonic() > deadline:
                 raise AssertionError("Disposable PostgreSQL failed to start")
@@ -116,6 +118,8 @@ def db():
 @pytest.fixture(autouse=True)
 def members(db):
     db.run(f"""
+      truncate private.brain_ai_charges;
+      update private.brain_ai_budget set accounted_krw=0;
       truncate auth.users cascade;
       insert into auth.users(id,email,email_confirmed_at,raw_user_meta_data) values
         ('{ADMIN}','seungzookim@gmail.com',now(),'{{"display_name":"운영자"}}'),
@@ -325,3 +329,76 @@ def test_expired_and_failed_requests_do_not_automatically_call_again(db):
         f"finished_at=now()-interval '25 hours' where request_id='{request}';"
     )
     assert db.reserve(request=request)["state"] == "error"
+
+
+def budget_reserve(db, user, request, request_hash=HASH):
+    return db.rpc(
+        "brain_budget_reserve", f"'{user}','{request}','{request_hash}'", role="service_role"
+    )
+
+
+def test_budget_requires_approved_owned_live_job_and_matching_input(db):
+    request = str(uuid4())
+    assert budget_reserve(db, MEMBER, request)["state"] == "denied"
+    approve(db)
+    approve(db, OTHER)
+    db.reserve(request=request)
+    assert budget_reserve(db, OTHER, request)["state"] == "denied"
+    assert budget_reserve(db, MEMBER, request, "b" * 64)["state"] == "denied"
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "0"
+    assert budget_reserve(db, MEMBER, request)["state"] == "reserved"
+    assert budget_reserve(db, MEMBER, request)["state"] == "already_charged"
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "4"
+
+
+def test_parallel_budget_reservations_cannot_exceed_20000_even_with_20_slots(db):
+    db.run("update private.brain_ai_budget set accounted_krw=19996;")
+    users = [str(uuid4()) for _ in range(20)]
+    requests = [str(uuid4()) for _ in users]
+    for user, request in zip(users, requests):
+        db.run(f"insert into auth.users(id,email_confirmed_at) values('{user}',now());")
+        approve(db, user)
+        assert db.reserve(user=user, request=request)["state"] == "reserved"
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(lambda pair: budget_reserve(db, *pair), zip(users, requests)))
+    assert sum(r["state"] == "reserved" for r in results) == 1
+    assert sum(r["state"] == "budget_exhausted" for r in results) == 19
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "20000"
+    assert db.rpc("brain_budget_status", role="authenticated", user=ADMIN)["stopped"] is True
+
+
+def test_budget_replay_has_one_winner_and_survives_job_cleanup_and_migration_rerun(db):
+    approve(db)
+    request = str(uuid4())
+    db.reserve(request=request)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(lambda _: budget_reserve(db, MEMBER, request), range(6)))
+    assert sum(r["state"] == "reserved" for r in results) == 1
+    assert sum(r["state"] == "already_charged" for r in results) == 5
+    db.rpc("brain_finish", f"'{MEMBER}','{request}',null,true", role="service_role")
+    db.run(f"delete from auth.users where id='{MEMBER}';")
+    db.run((ROOT / "supabase/migrations/202609270003_ai_budget.sql").read_text())
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "4"
+    assert db.run("select count(*) from private.brain_ai_charges;") == "1"
+
+
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+def test_members_cannot_change_budget_or_call_budget_admission(db, role):
+    approve(db)
+    for sql in (
+        "select * from private.brain_ai_budget;",
+        "update private.brain_ai_budget set accounted_krw=0;",
+        "delete from private.brain_ai_charges;",
+        f"select public.brain_budget_reserve('{MEMBER}','{uuid4()}','{HASH}');",
+    ):
+        assert "permission denied" in db.run(sql, role=role, user=MEMBER, fails=True)
+    db.run("select public.brain_budget_status();", role=role, user=MEMBER, fails=True)
+
+
+def test_missing_budget_row_fails_closed(db):
+    approve(db)
+    request = str(uuid4())
+    db.reserve(request=request)
+    db.run("delete from private.brain_ai_budget;")
+    assert budget_reserve(db, MEMBER, request)["state"] == "unavailable"
+    db.run((ROOT / "supabase/migrations/202609270003_ai_budget.sql").read_text())

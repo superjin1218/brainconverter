@@ -76,6 +76,10 @@ export class HarnessApi {
     return this.read(response);
   }
 
+  async provider() {
+    return this.read(await this.request("/api/provider", {signal: AbortSignal.timeout(12000)}));
+  }
+
   async setLocalProvider(apiKey = null) {
     const response = await this.request("/api/local/provider", {
       method: apiKey === null ? "DELETE" : "POST",
@@ -103,6 +107,10 @@ export class HarnessApi {
 
   async members() {
     return this.read(await this.request("/api/admin/members", {signal: AbortSignal.timeout(12000)}));
+  }
+
+  async budget() {
+    return this.read(await this.request("/api/admin/budget", {signal: AbortSignal.timeout(12000)}));
   }
 
   async updateMember(id, status) {

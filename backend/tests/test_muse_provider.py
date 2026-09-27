@@ -71,7 +71,31 @@ def test_other_model_is_blocked_before_any_request(monkeypatch):
 def test_openai_credentials_are_never_reused_for_meta_or_vercel(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", FAKE_KEY)
     monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("AI_API_KEY", raising=False)
     monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
     monkeypatch.setenv("HARNESS_PROVIDER", "muse")
     with pytest.raises(RuntimeError, match="Gateway"):
+        build_provider()
+
+
+def test_vercel_saved_ai_api_key_alias_is_used_without_extra_calls(monkeypatch):
+    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
+    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
+    monkeypatch.setenv("AI_API_KEY", FAKE_KEY)
+    monkeypatch.setenv("HARNESS_PROVIDER", "muse")
+    assert build_provider().api_key == FAKE_KEY
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "  preferred-fake-gateway-key  ")
+    assert build_provider().api_key == "preferred-fake-gateway-key"
+    monkeypatch.setenv("AI_GATEWAY_API_KEY", "   ")
+    assert build_provider().api_key == FAKE_KEY
+
+
+@pytest.mark.parametrize("hosting_var,hosting_value", [("VERCEL", "1"), ("VERCEL_ENV", "preview")])
+def test_hosted_app_cannot_use_mock_when_app_env_is_missing(
+    monkeypatch, hosting_var, hosting_value
+):
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.setenv(hosting_var, hosting_value)
+    monkeypatch.setenv("HARNESS_PROVIDER", "mock")
+    with pytest.raises(RuntimeError, match="실제 모델"):
         build_provider()

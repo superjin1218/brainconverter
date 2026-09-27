@@ -1,4 +1,4 @@
-.PHONY: install dev dev-mock test test-sql test-frontend lint docker-build
+.PHONY: install dev dev-ai dev-mock test test-sql test-frontend lint docker-build
 
 install:
 	python3 -m venv .venv
@@ -9,6 +9,9 @@ dev:
 
 dev-mock:
 	APP_ENV=development AUTH_MODE=none HARNESS_PROVIDER=mock .venv/bin/uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8080
+
+dev-ai:
+	APP_ENV=development AUTH_MODE=supabase HARNESS_PROVIDER=muse APP_PUBLIC_URL=http://127.0.0.1:8080 .venv/bin/uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8080 --env-file .env.local
 
 test:
 	.venv/bin/pytest -q

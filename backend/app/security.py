@@ -55,7 +55,7 @@ class BodyLimitMiddleware:
         self.app, self.max_bytes = app, max_bytes
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope["method"] in {"GET", "HEAD"}:
+        if scope["type"] != "http":
             return await self.app(scope, receive, send)
         body = bytearray()
         while True:

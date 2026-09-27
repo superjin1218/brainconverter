@@ -8,11 +8,11 @@ import re
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 
-from .provider import MUSE_MODEL, MockSemanticProvider, MuseSparkProvider
+from .provider import MUSE_MODEL, MockSemanticProvider, MuseSparkProvider, muse_api_key
 from .service import HarnessService
 
 
-def require_local_request(request: Request) -> None:
+def require_loopback_origin(request: Request) -> None:
     try:
         local_client = bool(
             request.client and ipaddress.ip_address(request.client.host).is_loopback
@@ -29,10 +29,20 @@ def require_local_request(request: Request) -> None:
         raise HTTPException(
             status_code=403, detail="이 컴퓨터의 로컬 화면에서만 설정할 수 있습니다."
         )
-    if request.method != "GET" and (
-        origin != own_origin or request.headers.get("x-local-setup") != "1"
-    ):
+    if request.method != "GET" and origin != own_origin:
+        raise HTTPException(status_code=403, detail="이 컴퓨터의 로컬 화면에서 요청하세요.")
+
+
+def require_local_request(request: Request) -> None:
+    require_loopback_origin(request)
+    if request.method != "GET" and request.headers.get("x-local-setup") != "1":
         raise HTTPException(status_code=403, detail="로컬 화면의 키 연결 버튼을 사용하세요.")
+
+
+def require_local_conversion(request: Request) -> None:
+    require_loopback_origin(request)
+    if request.headers.get("x-requested-with") != "brain-site":
+        raise HTTPException(status_code=403, detail="로컬 화면의 변환 버튼을 사용하세요.")
 
 
 def local_provider_router(application: FastAPI) -> APIRouter:
@@ -45,9 +55,7 @@ def local_provider_router(application: FastAPI) -> APIRouter:
     def status() -> dict:
         service = application.state.harness_service
         provider = service.provider.name if service else os.getenv("HARNESS_PROVIDER", "muse")
-        configured = provider == "muse" and (
-            service is not None or bool(os.getenv("AI_GATEWAY_API_KEY", "").strip())
-        )
+        configured = provider == "muse" and (service is not None or bool(muse_api_key()))
         return {"provider": provider, "keyConfigured": configured, "model": MUSE_MODEL}
 
     def require_idle() -> None:

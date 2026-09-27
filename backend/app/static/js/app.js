@@ -12,7 +12,12 @@ class HarnessDashboard {
     this.membership = new MembershipPanel(this.api, () => {
       this.view.setState("empty");
       this.api.pending = null;
-      this.localProvider.setAccessAllowed(!this.membership.enabled || this.membership.member?.status === "approved");
+      const approved = !this.membership.enabled || this.membership.member?.status === "approved";
+      this.localProvider.setAccessAllowed(
+        approved,
+        approved && (!this.membership.enabled || this.membership.member?.role === "admin"),
+        !this.membership.enabled,
+      );
       this.refreshUsage();
     });
     this.localProvider = new LocalProviderPanel(this.api, () => {
@@ -32,6 +37,11 @@ class HarnessDashboard {
     registerConversionTool({form: this.form, convert: payload => this.convert(payload)});
     this.providerReady = this.localProvider.start();
     this.authReady = this.membership.start();
+    document.querySelector("#open-settings").addEventListener("click", () => {
+      if (this.membership.member?.role === "admin" && this.membership.member.status === "approved") {
+        this.membership.loadMembers().catch(error => this.membership.adminMessage(error.message));
+      }
+    });
     Promise.all([this.providerReady, this.authReady]).then(() => this.refreshUsage());
     document.querySelector("#refresh-usage").addEventListener("click", () => this.refreshUsage());
     document.querySelector("#refresh-admin").addEventListener("click", () => this.refreshAdmin());

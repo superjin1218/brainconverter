@@ -30,6 +30,15 @@ MUSE_MODEL = "meta/muse-spark-1.3-contributor"
 MUSE_RESERVE_MICROUSD = 2000
 
 
+def muse_api_key() -> str:
+    """Resolve server credentials without exposing them to the browser."""
+    for name in ("AI_GATEWAY_API_KEY", "AI_API_KEY", "VERCEL_OIDC_TOKEN"):
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
 def strict_schema() -> dict:
     schema = StrategyIR.model_json_schema()
 
@@ -177,11 +186,7 @@ class MuseSparkProvider(OpenAIChatProvider):
     def __init__(
         self, transport: httpx.AsyncBaseTransport | None = None, *, api_key: str | None = None
     ) -> None:
-        key = (
-            api_key
-            if api_key is not None
-            else (os.getenv("AI_GATEWAY_API_KEY") or os.getenv("VERCEL_OIDC_TOKEN", ""))
-        )
+        key = api_key if api_key is not None else muse_api_key()
         if not key.strip():
             raise RuntimeError("Vercel AI Gateway API 키가 필요합니다.")
         self.api_key = key.strip()
@@ -272,7 +277,11 @@ class MockSemanticProvider:
 def build_provider() -> SemanticProvider:
     provider_name = os.getenv("HARNESS_PROVIDER", "muse").strip().lower()
     if provider_name == "mock":
-        if os.getenv("APP_ENV") == "production":
+        if (
+            os.getenv("APP_ENV") == "production"
+            or os.getenv("VERCEL") == "1"
+            or os.getenv("VERCEL_ENV") in {"production", "preview"}
+        ):
             raise RuntimeError("운영 환경에는 실제 모델 공급자를 설정해야 합니다.")
         return MockSemanticProvider()
     if provider_name == "muse":

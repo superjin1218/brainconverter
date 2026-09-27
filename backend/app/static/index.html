@@ -46,11 +46,6 @@
             <span id="provider-mode" class="provider-mode">연결 확인 중</span>
           </div>
           <p id="provider-description"></p>
-          <div class="provider-budget">
-            <div><span>허용 모델</span><b id="provider-model">연결 확인 중</b></div>
-            <p>이 프로그램은 지정된 저가 모델만 사용하며 비싼 모델로 자동 전환하지 않습니다.</p>
-            <p>변환 한 번에 AI를 1회 호출합니다. 오류가 나도 자동으로 재시도하지 않습니다.</p>
-          </div>
           <form id="provider-form" autocomplete="off">
             <label for="openai-api-key">Vercel AI Gateway API 키</label>
             <div class="provider-input-row">
@@ -63,6 +58,13 @@
           <p id="provider-key-note" class="provider-note">키는 이 로컬 서버의 메모리에서만 사용합니다. 연결을 해제하거나 서버를 재시작하면 입력한 키가 해제됩니다.</p>
           <p id="provider-feedback" class="provider-feedback" role="status" aria-live="polite"></p>
           <button id="disconnect-provider" class="copy-button" type="button" hidden>연결 해제 · 모의 모드로 전환</button>
+      </section>
+      <section id="member-admin-panel" class="member-admin" hidden aria-labelledby="members-title">
+        <div class="block-head"><h2 id="members-title">회원 승인 관리</h2><button id="members-refresh" class="copy-button" type="button">새로고침</button></div>
+        <p class="auth-note">이메일 인증을 마친 회원을 승인하거나 이용을 중지할 수 있습니다.</p>
+        <p id="ai-budget-status" class="auth-note" role="status">AI 비용 한도 확인 중…</p>
+        <p id="members-feedback" role="status"></p>
+        <div id="members-list"></div>
       </section>
       <div class="dialog-footer">
         <button id="done-settings" class="copy-button" type="button">닫기</button>
@@ -98,13 +100,6 @@
         <button id="auth-refresh" class="copy-button" type="button">승인 상태 확인</button>
       </div>
       <p id="auth-feedback" class="auth-feedback" role="status" aria-live="polite"></p>
-    </section>
-
-    <section id="member-admin-panel" class="member-admin" hidden aria-labelledby="members-title">
-      <div class="block-head"><h2 id="members-title">회원 승인 관리</h2><button id="members-refresh" class="copy-button" type="button">새로고침</button></div>
-      <p class="auth-note">이메일 인증을 마친 회원을 승인하거나 이용을 중지할 수 있습니다.</p>
-      <p id="members-feedback" role="status"></p>
-      <div id="members-list"></div>
     </section>
 
     <main id="dashboard" class="workspace" hidden>

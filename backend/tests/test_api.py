@@ -15,7 +15,12 @@ from backend.app.main import app, create_app  # noqa: E402, I001
 from backend.app.provider import MockSemanticProvider  # noqa: E402, I001
 
 
-client = TestClient(app)
+client = TestClient(
+    app,
+    base_url="http://127.0.0.1",
+    client=("127.0.0.1", 50000),
+    headers={"origin": "http://127.0.0.1", "x-requested-with": "brain-site"},
+)
 
 
 def test_health_and_dashboard_are_served():
@@ -84,3 +89,43 @@ def test_production_convert_requires_valid_gateway_signature():
 def test_oversized_and_blank_input_are_rejected():
     assert client.post("/api/convert", content=b"x" * 17000).status_code == 413
     assert client.post("/api/convert", json={"strategy": "   "}).status_code == 422
+
+
+def test_get_and_head_cannot_bypass_body_cap_before_gateway_authentication():
+    config = AppConfig(
+        environment="production",
+        gateway_shared_secret="test-secret",
+        allowed_emails=frozenset(),
+        static_directory=AppConfig.from_environment().static_directory,
+    )
+    calls = []
+
+    def provider():
+        calls.append(True)
+        return MockSemanticProvider()
+
+    with TestClient(create_app(config, provider)) as gateway:
+        for method in ("GET", "HEAD"):
+            assert gateway.request(method, "/api/convert", content=b"x" * 17000).status_code == 413
+    assert calls == []
+
+
+def test_local_unauthenticated_conversion_blocks_external_host_origin_and_remote_peer():
+    for headers in (
+        {"origin": "https://untrusted.example"},
+        {"host": "untrusted.example", "origin": "http://untrusted.example"},
+        {"x-forwarded-for": "127.0.0.1"},
+    ):
+        assert (
+            client.post(
+                "/api/convert", json={"strategy": "최근 5일 하락"}, headers=headers
+            ).status_code
+            == 403
+        )
+    with TestClient(
+        app,
+        base_url="http://127.0.0.1",
+        client=("192.0.2.10", 1),
+        headers={"origin": "http://127.0.0.1", "x-requested-with": "brain-site"},
+    ) as remote:
+        assert remote.post("/api/convert", json={"strategy": "최근 5일 하락"}).status_code == 403

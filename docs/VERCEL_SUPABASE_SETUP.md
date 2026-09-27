@@ -8,9 +8,9 @@
 
 SQL Editor에서 [회원·사용량 마이그레이션](../supabase/migrations/202609270001_membership.sql)을 실행합니다. 새 private 테이블·승인 함수·사용량 함수를 만들고 기존 Auth 계정도 승인 대기로 등록합니다. 기존 테이블을 삭제하지 않습니다. 같은 마이그레이션은 다시 실행할 수 있습니다.
 
-이어서 [동시 20건·대기열 업그레이드](../supabase/migrations/202609270002_concurrency_queue.sql)를 실행합니다. 이미 회원 마이그레이션이 적용된 프로젝트에는 이 업그레이드만 실행하면 됩니다. 앞으로 초기 설치는 날짜 순서대로 모든 마이그레이션을 실행하세요.
+이어서 [동시 20건·대기열 업그레이드](../supabase/migrations/202609270002_concurrency_queue.sql), [누적 2만 원 비용 제한](../supabase/migrations/202609270003_ai_budget.sql)을 순서대로 실행합니다. 기존 프로젝트에는 아직 적용하지 않은 마이그레이션만 실행하세요. 초기 설치는 001 → 002 → 003 순서입니다. 003을 다시 실행해도 누적 금액을 초기화하지 않습니다.
 
-**적용 완료:** 대상 프로젝트 SQL Editor에서 성공을 확인했습니다. [읽기 전용 검증 SQL](../supabase/verify_membership.sql)로 세 테이블의 RLS 활성화·익명/회원 직접 CRUD 금지, 변환 예약·결과 함수의 서버 전용 실행 권한도 확인했습니다. 현재 계정·승인 회원·운영자는 모두 0명입니다.
+**적용 완료:** 대상 프로젝트 SQL Editor에서 성공을 확인했습니다. [읽기 전용 검증 SQL](../supabase/verify_membership.sql)로 세 테이블의 RLS 활성화·익명/회원 직접 CRUD 금지, 변환 예약·결과 함수의 서버 전용 실행 권한도 확인했습니다. 최초 운영자의 이메일 인증·approved/admin 상태를 확인했습니다. 003 적용 후 한도 20,000원·누적 0원·익명/일반 회원의 예약 금지·서버 전용 예약 권한도 확인했습니다.
 
 회원 테이블은 브라우저 CRUD를 허용하지 않습니다. 회원 JWT로 자신의 상태 조회 및 운영자 관리 함수만 실행할 수 있고, 변환 예약·결과 저장은 서버 Secret 권한으로만 처리합니다. 회원 정보의 `role`·`status`를 직접 바꾸는 방식은 사용하지 않습니다.
 
@@ -35,9 +35,9 @@ Supabase Authentication에서:
 
 `seungzookim@gmail.com`으로 직접 가입하고 인증 메일을 확인합니다. 비밀번호를 채팅으로 전달하지 않습니다.
 
-그 후 신뢰된 SQL Editor에서 [첫 운영자 설정](../supabase/bootstrap_operator.sql)을 실행합니다. 이메일 인증을 완료한 해당 계정만 approved/admin으로 바꾸며, 계정이 없거나 미인증이면 실행을 중단합니다. 현재는 운영자 계정 생성·권한 부여를 아직 하지 않았습니다.
+그 후 신뢰된 SQL Editor에서 [첫 운영자 설정](../supabase/bootstrap_operator.sql)을 실행합니다. 이메일 인증을 완료한 해당 계정만 approved/admin으로 바꾸며, 계정이 없거나 미인증이면 실행을 중단합니다. 현재 해당 운영자 계정의 이메일 인증과 approved/admin 상태를 실제 Supabase에서 확인했습니다.
 
-운영자로 로그인하면 **회원 승인 관리**가 표시됩니다. 일반 회원의 승인·거절·이용 중지를 처리합니다. 운영자 계정 자체의 권한 변경은 대시보드에서 별도로 관리하며 사이트 버튼으로 변경할 수 없습니다.
+운영자로 로그인하면 오른쪽 위 **설정 → 회원 승인 관리**에서 회원 목록과 누적 AI 비용 한도를 확인할 수 있습니다. 일반 회원은 설정 버튼이나 API 키 입력창 없이 서버 공용 키를 사용합니다. 일반 회원의 승인·거절·이용 중지를 처리합니다. 운영자 계정 자체의 권한 변경은 대시보드에서 별도로 관리하며 사이트 버튼으로 변경할 수 없습니다.
 
 ## 4. Vercel 환경변수
 
@@ -57,7 +57,7 @@ Supabase Authentication에서:
 | SUPABASE_URL | https://sogpsiheygdwmhdlizvy.supabase.co |
 | SUPABASE_PUBLISHABLE_KEY | 해당 Supabase 프로젝트 공개 키 |
 | SUPABASE_SECRET_KEY | 해당 프로젝트 서버 Secret, 비밀 변수 |
-| AI_GATEWAY_API_KEY | 새 Vercel AI Gateway 키, 비밀 변수 |
+| AI_GATEWAY_API_KEY 또는 AI_API_KEY | Vercel AI Gateway 키, 비밀 변수 |
 
 Chrome에서 `MAX_CONCURRENT_JOBS=20`을 Production·Preview에 저장했습니다. 환경변수는 다음 배포부터 적용됩니다.
 
@@ -65,7 +65,7 @@ Chrome에서 `HARNESS_PROVIDER=muse`, `MUSE_MODEL=meta/muse-spark-1.3-contributo
 
 기존 Supabase 서버 키를 `SUPABASE_SECRET_KEY`라는 **Secret 유형·Production 전용** 변수로 저장했고 Vercel 성공 알림을 확인했습니다. 키를 새로 생성·회전하지 않았으며 로컬 파일에는 저장하지 않았습니다.
 
-Vercel 배포에서는 자동 제공되는 `VERCEL_OIDC_TOKEN`으로 AI Gateway에 인증할 수도 있으므로 `AI_GATEWAY_API_KEY`가 반드시 필요한 것은 아닙니다. 프로그램은 명시적인 Gateway 키가 있으면 우선 사용하고, 없으면 OIDC를 사용합니다. OIDC를 실제 배포에서 확인하거나 별도 Gateway 키를 준비하고, 모델 사용 권한·크레딧을 확인해야 합니다. 로컬 실사용에는 Gateway 키가 필요합니다. [Vercel OIDC 안내](https://vercel.com/docs/ai-gateway/authentication-and-byok/oidc).
+Vercel 배포에서는 자동 제공되는 `VERCEL_OIDC_TOKEN`으로 AI Gateway에 인증할 수도 있으므로 `AI_GATEWAY_API_KEY`가 반드시 필요한 것은 아닙니다. 프로그램은 `AI_GATEWAY_API_KEY` → `AI_API_KEY` → `VERCEL_OIDC_TOKEN` 순서로 사용합니다. 사용자가 저장한 Production Secret 이름 `AI_API_KEY`를 인식하도록 수정했습니다. 키 저장은 확인했지만 발급처·권한·실제 호출 성공은 아직 검증하지 않았습니다. 수정 코드와 환경변수는 다음 배포부터 적용되며 로컬에는 별도 설정해야 합니다. OIDC를 실제 배포에서 확인하거나 별도 Gateway 키를 준비하고, 모델 사용 권한·크레딧을 확인해야 합니다. 로컬 실사용에는 Gateway 키가 필요합니다. [Vercel OIDC 안내](https://vercel.com/docs/ai-gateway/authentication-and-byok/oidc).
 
 Muse 요청은 Gateway에서 Meta 제공자만 허용하며 모델·제공자 자동 전환이 없습니다. Contributor 학습 활용 조건에 동의한 변환만 호출합니다. [Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions).
 
@@ -84,6 +84,8 @@ Muse 요청은 Gateway에서 Meta 제공자만 허용하며 모델·제공자 �
 회원별 월 50회·일 20회·분당 2회, 사이트 전체 월 1,000회·동시 20건입니다. 20건을 넘으면 Supabase 대기열에 요청 ID·입력 해시만 보관합니다. 열린 화면에서 5초마다 같은 ID·입력으로 원자적 처리 슬롯을 확보하고, 순서가 오면 실제 변환을 한 번 시작합니다. 처리 중인 요청은 결과 조회만 합니다. 별도 상주 서버·백그라운드 워커·유료 큐 서비스는 필요하지 않습니다.
 
 대기 최대 10분이며 화면을 닫거나 연결이 끊겨 2분간 확인하지 않은 대기 요청은 만료됩니다. 화면을 닫은 뒤에도 자동 처리하는 기능은 없습니다. 대기열 입장 때 사용량을 한 번 예약하므로 취소·만료된 대기도 회원/사이트 요청 한도에 포함하지만 AI 비용은 발생하지 않습니다. 월·일·분당 한도 초과는 대기열로 넘기지 않고 거절합니다.
+
+추가로 실제 Muse 시도 전에 4원씩 누적 예약하고 20,000원에서 새 유료 호출을 차단합니다. DB 오류에도 호출하지 않으며 월 변경·회원 삭제로 금액을 초기화하지 않습니다. 운영자 설정에서 확인합니다. 실제 청구서·다른 앱 비용을 제한하는 기능은 아니며 [예산 계산과 범위](AI_BUDGET.md)를 확인하세요.
 
 한국 시간 기준 일·월 경계를 사용합니다. 실패한 시도도 예약 횟수에 포함합니다. 변경하려면 마이그레이션 함수 및 사용량 표시의 상수를 함께 수정합니다.
 

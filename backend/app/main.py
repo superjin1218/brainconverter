@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import time
 from collections.abc import Callable
 from uuid import UUID
@@ -11,10 +12,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import AppConfig
-from .local_provider import local_provider_router
+from .local_provider import local_provider_router, require_local_conversion
 from .membership import ACCESS_COOKIE, MembershipService, auth_router, same_origin
 from .models import ConversionResponse, ConvertRequest
-from .provider import SemanticProvider, build_provider
+from .provider import MUSE_MODEL, SemanticProvider, build_provider, muse_api_key
 from .security import BodyLimitMiddleware, GatewayVerifier
 from .service import HarnessService
 
@@ -81,6 +82,22 @@ def create_app(
             "provider": service.provider.name if service else "not-initialized",
         }
 
+    @application.get("/api/provider")
+    async def provider_status(request: Request):
+        if resolved_config.auth_mode == "supabase":
+            await membership.identify(request, approved=True)
+        elif resolved_config.is_production:
+            raise HTTPException(404, "설정을 조회할 수 없습니다.")
+        service = application.state.harness_service
+        provider = service.provider.name if service else os.getenv("HARNESS_PROVIDER", "muse")
+        configured = provider == "muse" and (service is not None or bool(muse_api_key()))
+        return {
+            "provider": provider,
+            "model": MUSE_MODEL,
+            "keyConfigured": configured,
+            "localKeyEntry": resolved_config.environment == "development",
+        }
+
     @application.post("/api/convert", response_model=ConversionResponse)
     async def convert(payload: ConvertRequest, request: Request) -> ConversionResponse:
         started = time.monotonic()
@@ -88,6 +105,8 @@ def create_app(
         if resolved_config.auth_mode == "supabase":
             same_origin(request, resolved_config.public_url)
             member = await membership.identify(request, approved=True)
+        elif resolved_config.auth_mode == "none":
+            require_local_conversion(request)
         application.state.active_conversions += 1
         job_id = None
         try:
@@ -140,6 +159,27 @@ def create_app(
                         429 if state == "limited" else 403 if state == "denied" else 409,
                         "이용 한도 또는 이전 요청 상태를 확인하세요. 잠시 후 다시 시도하세요.",
                     )
+            if member and job_id and service.provider.name == "muse":
+                budget = await membership.rpc(
+                    "brain_budget_reserve",
+                    body={
+                        "p_user_id": member["id"],
+                        "p_request_id": job_id,
+                        "p_request_hash": hashlib.sha256(
+                            payload.model_dump_json().encode()
+                        ).hexdigest(),
+                    },
+                    server=True,
+                )
+                if not isinstance(budget, dict) or budget.get("state") != "reserved":
+                    raise HTTPException(
+                        402
+                        if isinstance(budget, dict) and budget.get("state") == "budget_exhausted"
+                        else 503,
+                        "누적 AI 비용 한도(20,000원)에 도달해 변환이 중지됐습니다."
+                        if isinstance(budget, dict) and budget.get("state") == "budget_exhausted"
+                        else "AI 비용 한도를 확인하지 못해 변환을 실행하지 않았습니다.",
+                    )
             result = await service.convert(payload)
             if member and job_id:
                 try:
@@ -171,7 +211,7 @@ def create_app(
                 result.usage["costMicrousd"],
             )
             return result
-        except RuntimeError as exc:
+        except (RuntimeError, HTTPException) as exc:
             if member and job_id:
                 try:
                     await membership.rpc(
@@ -186,6 +226,8 @@ def create_app(
                     )
                 except HTTPException:
                     logging.getLogger("uvicorn.error").warning("conversion ledger finish failed")
+            if isinstance(exc, HTTPException):
+                raise
             raise HTTPException(status_code=503, detail=str(exc)) from exc
         finally:
             application.state.active_conversions -= 1
@@ -220,6 +262,13 @@ def create_app(
             raise HTTPException(404)
         await membership.identify(request, approved=True)
         return await membership.rpc("brain_usage", request.cookies[ACCESS_COOKIE])
+
+    @application.get("/api/admin/budget")
+    async def budget_status(request: Request):
+        if resolved_config.auth_mode != "supabase":
+            raise HTTPException(404)
+        await membership.identify(request, admin=True)
+        return await membership.rpc("brain_budget_status", request.cookies[ACCESS_COOKIE])
 
     application.mount(
         "/", StaticFiles(directory=resolved_config.static_directory, html=True), name="static"

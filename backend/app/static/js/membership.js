@@ -132,6 +132,13 @@ export class MembershipPanel {
   }
 
   async loadMembers() {
+    const budgetLabel = document.querySelector("#ai-budget-status");
+    try {
+      const budget = await this.api.budget();
+      budgetLabel.textContent = `${budget.stopped ? "AI 변환 중지" : "AI 비용 한도"} · 누적 ${budget.accountedKrw.toLocaleString()} / ${budget.limitKrw.toLocaleString()}원 (보수적 계산)`;
+    } catch {
+      budgetLabel.textContent = "AI 비용 한도를 확인하지 못했습니다. 운영 설정을 확인하세요.";
+    }
     const members = await this.api.members();
     const list = document.querySelector("#members-list");
     list.replaceChildren();
