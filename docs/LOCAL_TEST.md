@@ -28,7 +28,7 @@ Git에서 제외된 `.env.local`에 Supabase URL·공개 키와 서버 Secret·A
 
 ## 배포 사이트
 
-Vercel Production에 `MUSE_API_PROVIDER=meta`를 저장했습니다. 기존 Secret `AI_API_KEY`를 자동으로 읽습니다. **저장한 환경변수와 수정 코드는 다음 배포부터 적용**되며 현재 배포는 하지 않았습니다. 브라우저에는 키 값을 전달하지 않습니다. 배포 직전 운영자 승인이 필요합니다.
+Vercel Production에 `MUSE_API_PROVIDER=meta`와 로컬에서 검증한 키를 Secret `META_API_KEY`로 저장했습니다. 기존 `AI_API_KEY`도 별칭으로 지원하지만 명시적인 Meta 키를 우선합니다. **저장한 환경변수와 수정 코드는 다음 배포부터 적용**되며 현재 배포는 하지 않았습니다. 브라우저에는 키 값을 전달하지 않습니다. 배포 직전 운영자 승인이 필요합니다.
 
 운영자는 **설정 → 회원 승인 관리**에서 회원을 관리합니다. 일반 회원의 이메일 인증에는 Custom SMTP가 필요합니다. [설정 문서](VERCEL_SUPABASE_SETUP.md)를 따르세요.
 

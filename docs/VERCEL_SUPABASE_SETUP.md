@@ -66,7 +66,7 @@ Chrome에서 `HARNESS_PROVIDER=muse`, `MUSE_MODEL=meta/muse-spark-1.3-contributo
 
 기존 Supabase 서버 키를 `SUPABASE_SECRET_KEY`라는 **Secret 유형·Production 전용** 변수로 저장했고 Vercel 성공 알림을 확인했습니다. 로컬 시험에도 기존 키를 Git에서 제외된 `.env.local`에 저장했습니다. 키를 새로 생성·회전하지 않았습니다.
 
-현재 사용자의 키는 Meta 직접 발급 키입니다. Vercel Production의 `MUSE_API_PROVIDER=meta`를 저장했고 기존 Secret 이름 `AI_API_KEY`를 그대로 사용합니다. 로컬에서는 `META_API_KEY`에 저장한 키로 성공했습니다. Meta 모드는 `META_API_KEY` → `AI_API_KEY`만 읽고 `https://api.meta.ai/v1/chat/completions`에 고정 연결합니다. 모델 식별자는 같은 Contributor 모델의 Meta 표기인 `muse-spark-1.3-contributor`로 전송합니다. 수정 코드와 환경변수는 승인 후 배포부터 적용됩니다. [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions).
+현재 사용자의 키는 Meta 직접 발급 키입니다. Vercel Production에 `MUSE_API_PROVIDER=meta`와 로컬에서 성공한 동일 키를 Secret `META_API_KEY`로 저장했습니다. 기존 `AI_API_KEY`는 별칭으로 지원하며 명시적인 Meta 키를 우선합니다. Meta 모드는 `META_API_KEY` → `AI_API_KEY`만 읽고 `https://api.meta.ai/v1/chat/completions`에 고정 연결합니다. 모델 식별자는 같은 Contributor 모델의 Meta 표기인 `muse-spark-1.3-contributor`로 전송합니다. 수정 코드와 환경변수는 승인 후 배포부터 적용됩니다. [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions).
 
 Vercel AI Gateway를 따로 선택하려면 `MUSE_API_PROVIDER=gateway`와 Vercel 발급 키를 설정합니다. 이 모드의 키 우선순위는 `AI_GATEWAY_API_KEY` → `AI_API_KEY` → `VERCEL_OIDC_TOKEN`입니다. OIDC는 Meta 직접 인증에 사용할 수 없습니다. [Vercel OIDC 안내](https://vercel.com/docs/ai-gateway/authentication-and-byok/oidc).
 
