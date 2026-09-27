@@ -31,8 +31,16 @@ export class DashboardView {
     this.bindCopyButtons();
   }
 
-  showLoading() {
+  showLoading(progress = {}) {
     this.setState("loading");
+    const queued = progress.status === "queued";
+    this.status.textContent = queued ? "대기열에서 대기 중" : "해석 중";
+    this.root.querySelector("#loading-title").textContent = queued
+      ? "처리 순서를 기다리는 중입니다"
+      : "전략을 해석하고 코드를 만들고 있습니다";
+    this.root.querySelector("#loading-description").textContent = queued
+      ? `대기 순서 ${progress.queuePosition || 1}번 · 빈자리가 생기면 자동으로 시작합니다. 이 화면을 열어 두세요.`
+      : "실제 AI 응답에는 최대 1분 정도 걸릴 수 있습니다.";
   }
 
   showError(message) {

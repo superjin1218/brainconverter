@@ -126,8 +126,14 @@ def create_app(
                 state = reserved.get("state") if isinstance(reserved, dict) else None
                 if state == "cached":
                     return ConversionResponse.model_validate(reserved["result"])
-                if state == "running":
-                    return JSONResponse({"status": "processing"}, status_code=202)
+                if state in {"running", "queued"}:
+                    return JSONResponse(
+                        {
+                            "status": "queued" if state == "queued" else "processing",
+                            "queuePosition": reserved.get("queuePosition"),
+                        },
+                        status_code=202,
+                    )
                 if state != "reserved":
                     job_id = None
                     raise HTTPException(
@@ -194,8 +200,14 @@ def create_app(
             body={"p_user_id": member["id"], "p_request_id": str(job_id)},
             server=True,
         )
-        if result.get("state") == "running":
-            return JSONResponse({"status": "processing"}, status_code=202)
+        if result.get("state") in {"running", "queued"}:
+            return JSONResponse(
+                {
+                    "status": "queued" if result["state"] == "queued" else "processing",
+                    "queuePosition": result.get("queuePosition"),
+                },
+                status_code=202,
+            )
         if result.get("state") == "cached":
             return ConversionResponse.model_validate(result["result"])
         raise HTTPException(

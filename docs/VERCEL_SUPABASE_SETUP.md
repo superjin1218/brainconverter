@@ -8,6 +8,8 @@
 
 SQL Editor에서 [회원·사용량 마이그레이션](../supabase/migrations/202609270001_membership.sql)을 실행합니다. 새 private 테이블·승인 함수·사용량 함수를 만들고 기존 Auth 계정도 승인 대기로 등록합니다. 기존 테이블을 삭제하지 않습니다. 같은 마이그레이션은 다시 실행할 수 있습니다.
 
+이어서 [동시 20건·대기열 업그레이드](../supabase/migrations/202609270002_concurrency_queue.sql)를 실행합니다. 이미 회원 마이그레이션이 적용된 프로젝트에는 이 업그레이드만 실행하면 됩니다. 앞으로 초기 설치는 날짜 순서대로 모든 마이그레이션을 실행하세요.
+
 **적용 완료:** 대상 프로젝트 SQL Editor에서 성공을 확인했습니다. [읽기 전용 검증 SQL](../supabase/verify_membership.sql)로 세 테이블의 RLS 활성화·익명/회원 직접 CRUD 금지, 변환 예약·결과 함수의 서버 전용 실행 권한도 확인했습니다. 현재 계정·승인 회원·운영자는 모두 0명입니다.
 
 회원 테이블은 브라우저 CRUD를 허용하지 않습니다. 회원 JWT로 자신의 상태 조회 및 운영자 관리 함수만 실행할 수 있고, 변환 예약·결과 저장은 서버 Secret 권한으로만 처리합니다. 회원 정보의 `role`·`status`를 직접 바꾸는 방식은 사용하지 않습니다.
@@ -49,13 +51,15 @@ Supabase Authentication에서:
 | AUTH_MODE | supabase |
 | HARNESS_PROVIDER | muse |
 | MUSE_MODEL | meta/muse-spark-1.3-contributor |
-| MAX_CONCURRENT_JOBS | 2 |
+| MAX_CONCURRENT_JOBS | 20 |
 | MODEL_TIMEOUT_SECONDS | 35 |
 | APP_PUBLIC_URL | https://natural-language-brain-alpha-harness.vercel.app |
 | SUPABASE_URL | https://sogpsiheygdwmhdlizvy.supabase.co |
 | SUPABASE_PUBLISHABLE_KEY | 해당 Supabase 프로젝트 공개 키 |
 | SUPABASE_SECRET_KEY | 해당 프로젝트 서버 Secret, 비밀 변수 |
 | AI_GATEWAY_API_KEY | 새 Vercel AI Gateway 키, 비밀 변수 |
+
+Chrome에서 `MAX_CONCURRENT_JOBS=20`을 Production·Preview에 저장했습니다. 환경변수는 다음 배포부터 적용됩니다.
 
 Chrome에서 `HARNESS_PROVIDER=muse`, `MUSE_MODEL=meta/muse-spark-1.3-contributor`, timeout 35를 Production·Preview에 저장했습니다. `AUTH_MODE=supabase`와 `APP_PUBLIC_URL`은 Production에 저장했습니다. 미사용 OpenAI 모델 변수는 Muse 변수로 변경했고 OpenAI 키를 등록하지 않았습니다. Preview의 실제 계정 테스트에는 별도 URL·Supabase 설정을 지정하세요. 로컬 설정 창의 키는 Vercel로 자동 이전되지 않습니다. 서버 Secret은 인증·한도 DB 함수에 사용하는 권한이므로 공개 키와 구분하고 브라우저 코드에 넣지 않습니다.
 
@@ -77,6 +81,10 @@ Muse 요청은 Gateway에서 Meta 제공자만 허용하며 모델·제공자 �
 
 ## 사용 제한과 보관
 
-회원별 월 50회·일 20회·분당 2회, 사이트 전체 월 1,000회·동시 2건입니다. 한국 시간 기준 일·월 경계를 사용합니다. 실패한 시도도 예약 횟수에 포함합니다. 변경하려면 마이그레이션 함수 및 사용량 표시의 상수를 함께 수정합니다.
+회원별 월 50회·일 20회·분당 2회, 사이트 전체 월 1,000회·동시 20건입니다. 20건을 넘으면 Supabase 대기열에 요청 ID·입력 해시만 보관합니다. 열린 화면에서 5초마다 같은 ID·입력으로 원자적 처리 슬롯을 확보하고, 순서가 오면 실제 변환을 한 번 시작합니다. 처리 중인 요청은 결과 조회만 합니다. 별도 상주 서버·백그라운드 워커·유료 큐 서비스는 필요하지 않습니다.
+
+대기 최대 10분이며 화면을 닫거나 연결이 끊겨 2분간 확인하지 않은 대기 요청은 만료됩니다. 화면을 닫은 뒤에도 자동 처리하는 기능은 없습니다. 대기열 입장 때 사용량을 한 번 예약하므로 취소·만료된 대기도 회원/사이트 요청 한도에 포함하지만 AI 비용은 발생하지 않습니다. 월·일·분당 한도 초과는 대기열로 넘기지 않고 거절합니다.
+
+한국 시간 기준 일·월 경계를 사용합니다. 실패한 시도도 예약 횟수에 포함합니다. 변경하려면 마이그레이션 함수 및 사용량 표시의 상수를 함께 수정합니다.
 
 동일 사용자·입력·요청 ID의 완료 결과는 24시간 이내 재사용합니다. 조회는 본인만 가능합니다. 오래된 결과는 새 예약 때 정리하고, 한도 계산용 요청 메타데이터는 최대 35일 정리 대상입니다. 별도 예약 작업이 없으므로 24시간이 지나자마자 자동 삭제된다는 보장은 없습니다. 추가 장기 보관이 필요하면 별도 정책을 정하세요.

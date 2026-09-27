@@ -211,9 +211,9 @@
           <p>FASTEXPR, 전체 시뮬레이션 설정과 코드 변환 점검 결과를 함께 확인할 수 있습니다.</p>
         </div>
 
-        <div id="result-loading" class="loading-state" hidden>
+        <div id="result-loading" class="loading-state" role="status" aria-live="polite" hidden>
           <div class="loader" aria-hidden="true"></div>
-          <div><b>전략을 해석하고 코드를 만들고 있습니다</b><span>실제 AI 응답에는 최대 1분 정도 걸릴 수 있습니다.</span></div>
+          <div><b id="loading-title">전략을 해석하고 코드를 만들고 있습니다</b><span id="loading-description">실제 AI 응답에는 최대 1분 정도 걸릴 수 있습니다.</span></div>
         </div>
 
         <div id="result-content" hidden>

@@ -85,6 +85,7 @@ def site():
         "reservation": "reserved",
         "cached": None,
         "finishFails": False,
+        "queuePosition": 3,
     }
     config = AppConfig(
         environment="production",
@@ -143,7 +144,12 @@ def site():
             assert payload["p_user_id"] == USER_ID
             if path.endswith("/brain_reserve"):
                 return httpx.Response(
-                    200, json={"state": state["reservation"], "result": state["cached"]}
+                    200,
+                    json={
+                        "state": state["reservation"],
+                        "result": state["cached"],
+                        "queuePosition": state["queuePosition"],
+                    },
                 )
             if path.endswith("/brain_finish"):
                 if state["finishFails"]:
@@ -151,7 +157,12 @@ def site():
                 state["cached"] = payload["p_result"]
                 return httpx.Response(200, json={"saved": True})
             return httpx.Response(
-                200, json={"state": state["reservation"], "result": state["cached"]}
+                200,
+                json={
+                    "state": state["reservation"],
+                    "result": state["cached"],
+                    "queuePosition": state["queuePosition"],
+                },
             )
         if path.endswith("/brain_members"):
             return httpx.Response(200, json=[])
@@ -223,7 +234,8 @@ def test_approved_member_converts_once_and_uses_database_cache(site):
 
 
 @pytest.mark.parametrize(
-    "reservation,code", [("running", 202), ("limited", 429), ("denied", 403), ("conflict", 409)]
+    "reservation,code",
+    [("running", 202), ("queued", 202), ("limited", 429), ("denied", 403), ("conflict", 409)],
 )
 def test_database_admission_state_prevents_an_extra_ai_request(site, reservation, code):
     client, state, _ = site
@@ -231,6 +243,23 @@ def test_database_admission_state_prevents_an_extra_ai_request(site, reservation
     connect(client)
     assert convert(client).status_code == code
     assert state["aiCalls"] == 0
+
+
+def test_queued_request_claims_once_and_polling_never_calls_ai(site):
+    client, state, _ = site
+    state.update(status="approved", reservation="queued")
+    connect(client)
+    request = str(uuid4())
+    result = convert(client, headers={"Idempotency-Key": request})
+    assert result.json() == {"status": "queued", "queuePosition": 3}
+    assert client.get(f"/api/jobs/{request}").json()["status"] == "queued"
+    assert state["aiCalls"] == 0
+    state["reservation"] = "reserved"
+    assert convert(client, headers={"Idempotency-Key": request}).status_code == 200
+    state["reservation"] = "cached"
+    assert client.get(f"/api/jobs/{request}").status_code == 200
+    assert convert(client, headers={"Idempotency-Key": request}).status_code == 200
+    assert state["aiCalls"] == 1
 
 
 def test_training_acknowledgement_is_required_before_ai_or_quota(site):

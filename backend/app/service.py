@@ -16,7 +16,7 @@ class HarnessService:
 
     def __init__(self, provider: SemanticProvider) -> None:
         self.provider = provider
-        self.job_semaphore = asyncio.Semaphore(int(os.getenv("MAX_CONCURRENT_JOBS", "2")))
+        self.job_semaphore = asyncio.Semaphore(int(os.getenv("MAX_CONCURRENT_JOBS", "20")))
 
     async def convert(self, request: ConvertRequest) -> ConversionResponse:
         try:

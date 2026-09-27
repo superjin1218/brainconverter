@@ -4,11 +4,11 @@ export class HarnessApi {
     this.pending = null;
   }
 
-  async convert(strategy, settings = null, expectedProvider = null, trainingConsent = false) {
+  async convert(strategy, settings = null, expectedProvider = null, trainingConsent = false, onProgress = () => {}) {
     const body = JSON.stringify({strategy, settings, trainingConsent});
     if (this.pending?.body !== body) this.pending = {body, id: crypto.randomUUID()};
     const requestId = this.pending.id;
-    const response = await this.request(this.endpoint, {
+    const options = {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -17,19 +17,21 @@ export class HarnessApi {
         ...(expectedProvider ? {"X-Expected-Provider": expectedProvider} : {}),
       },
       body,
-      signal: AbortSignal.timeout(65000),
-    });
-    if (response.status === 202) {
-      const deadline = Date.now() + 65000;
-      while (Date.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const poll = await this.request(`/api/jobs/${requestId}`, {signal: AbortSignal.timeout(10000)});
-        if (poll.status === 202) continue;
-        const result = await this.read(poll, true);
-        this.pending = null;
-        return result;
+    };
+    const deadline = Date.now() + 10 * 60000 + 65000;
+    let response = await this.request(this.endpoint, {...options, signal: AbortSignal.timeout(65000)});
+    while (response.status === 202) {
+      const progress = await this.read(response);
+      onProgress(progress);
+      if (Date.now() >= deadline) {
+        throw new Error("대기 시간이 길어졌습니다. 같은 입력으로 다시 누르면 기존 요청을 확인합니다.");
       }
-      throw new Error("아직 처리 중입니다. 같은 입력으로 다시 누르면 기존 요청을 확인합니다.");
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Only queued jobs attempt an atomic claim. Running jobs are read-only polls.
+      // Reuse the ID/body so admission and quota are never duplicated.
+      response = progress.status === "queued"
+        ? await this.request(this.endpoint, {...options, signal: AbortSignal.timeout(65000)})
+        : await this.request(`/api/jobs/${requestId}`, {signal: AbortSignal.timeout(10000)});
     }
     const result = await this.read(response, true);
     this.pending = null;

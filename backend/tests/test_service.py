@@ -98,3 +98,34 @@ async def test_success_interprets_once_and_preserves_expression_settings_and_usa
     assert result.confidence is None
     assert "consensusPassed" not in result.validation.model_dump()
     assert result.usage == {"inputTokens": 900, "outputTokens": 180, "costMicrousd": 126}
+
+
+async def test_twenty_simultaneous_interpretations_call_once_and_overflow_never_calls(monkeypatch):
+    monkeypatch.delenv("MAX_CONCURRENT_JOBS", raising=False)
+    ready, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+
+    class GatedProvider(MockSemanticProvider):
+        async def interpret(self, system_prompt, strategy):
+            nonlocal calls
+            calls += 1
+            if calls == 20:
+                ready.set()
+            await release.wait()
+            return await super().interpret(system_prompt, strategy)
+
+    service = HarnessService(GatedProvider())
+    tasks = [
+        asyncio.create_task(service.convert(ConvertRequest(strategy=STRATEGY))) for _ in range(20)
+    ]
+    try:
+        await asyncio.wait_for(ready.wait(), timeout=2)
+        with pytest.raises(RuntimeError, match="요청이 많습니다"):
+            await service.convert(ConvertRequest(strategy=STRATEGY))
+        assert calls == 20
+    finally:
+        release.set()
+        results = await asyncio.gather(*tasks)
+    assert all(result.status == "PASS" for result in results)
+    assert (await service.convert(ConvertRequest(strategy=STRATEGY))).status == "PASS"
+    assert calls == 21

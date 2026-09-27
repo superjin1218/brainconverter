@@ -105,9 +105,9 @@ def db():
               select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid;
             $$;
         """)
-        migration = (ROOT / "supabase/migrations/202609270001_membership.sql").read_text()
-        database.run(migration)
-        database.run(migration)  # Migration is rerunnable without deleting members.
+        for path in sorted((ROOT / "supabase/migrations").glob("*.sql")):
+            database.run(path.read_text())
+            database.run(path.read_text())  # Every upgrade is rerunnable.
         yield database
     finally:
         subprocess.run(["docker", "stop", name], capture_output=True, timeout=15)
@@ -237,12 +237,81 @@ def test_database_enforces_usage_limits(db, kind):
 
 
 def test_parallel_reservations_never_exceed_global_running_limit(db):
+    users = [str(uuid4()) for _ in range(24)]
+    requests = [str(uuid4()) for _ in users]
+    for user in users:
+        db.run(f"insert into auth.users(id,email_confirmed_at) values('{user}',now());")
+        approve(db, user)
+    with ThreadPoolExecutor(max_workers=24) as pool:
+        results = list(pool.map(lambda pair: db.reserve(*pair), zip(users, requests)))
+    assert sum(result["state"] == "reserved" for result in results) == 20
+    assert sum(result["state"] == "queued" for result in results) == 4
+    assert db.run("select count(*) from private.brain_jobs where status='running';") == "20"
+
+    queued = json.loads(
+        db.run("""select jsonb_agg(jsonb_build_array(user_id,request_id)
+      order by started_at,request_id) from private.brain_jobs where status='queued';""")
+    )
+    # One finished slot belongs to the queue head, even when a later member polls first.
+    owner, running = next(
+        (user, request)
+        for user, request, result in zip(users, requests, results)
+        if result["state"] == "reserved"
+    )
+    db.rpc("brain_finish", f"'{owner}','{running}','{{}}',false", role="service_role")
+    assert db.reserve(*queued[-1])["state"] == "queued"
+    assert db.reserve(*queued[0])["state"] == "reserved"
+    assert db.reserve(*queued[0])["state"] == "running"
+    assert db.run("select count(*) from private.brain_jobs;") == "24"
+    assert db.run("select count(*) from private.brain_jobs where status='running';") == "20"
+
+
+def test_per_member_minute_limit_is_still_two(db):
     approve(db)
-    approve(db, OTHER)
+    assert db.reserve()["state"] == "reserved"
+    assert db.reserve()["state"] == "reserved"
+    assert db.reserve()["state"] == "limited"
+
+
+def test_queue_claim_has_one_winner_and_expired_queue_does_not_restart(db):
+    approve(db)
+    request = str(uuid4())
+    db.run(f"""insert into private.brain_jobs
+      (request_id,user_id,request_hash,status,last_seen_at)
+      values('{request}','{MEMBER}','{HASH}','queued',now());""")
     with ThreadPoolExecutor(max_workers=6) as pool:
-        results = list(pool.map(lambda i: db.reserve(user=MEMBER if i % 2 else OTHER), range(6)))
-    assert sum(result["state"] == "reserved" for result in results) == 2
-    assert sum(result["state"] == "limited" for result in results) == 4
+        results = list(pool.map(lambda _: db.reserve(request=request), range(6)))
+    assert sum(result["state"] == "reserved" for result in results) == 1
+    assert sum(result["state"] == "running" for result in results) == 5
+    db.run(f"""update private.brain_jobs set status='queued',
+      last_seen_at=now()-interval '121 seconds' where request_id='{request}';""")
+    assert db.reserve(request=request)["state"] == "error"
+    assert db.run("select count(*) from private.brain_jobs;") == "1"
+
+
+def test_queued_request_wait_over_two_minutes_uses_new_running_lease(db):
+    approve(db)
+    request = str(uuid4())
+    db.run(f"""insert into private.brain_jobs
+      (request_id,user_id,request_hash,status,started_at,last_seen_at)
+      values('{request}','{MEMBER}','{HASH}','queued',now()-interval '3 minutes',now());""")
+    assert db.reserve(request=request)["state"] == "reserved"
+    assert db.rpc("brain_job", f"'{MEMBER}','{request}'", role="service_role")["state"] == "running"
+
+
+def test_queue_upgrade_preserves_existing_data_and_permissions(db):
+    approve(db)
+    request = str(uuid4())
+    db.reserve(request=request)
+    db.run((ROOT / "supabase/migrations/202609270002_concurrency_queue.sql").read_text())
+    assert db.rpc("brain_access", role="authenticated", user=MEMBER)["status"] == "approved"
+    assert db.reserve(request=request)["state"] == "running"
+    assert "permission denied" in db.run(
+        f"select public.brain_reserve('{MEMBER}','{request}','{HASH}');",
+        role="authenticated",
+        user=MEMBER,
+        fails=True,
+    )
 
 
 def test_expired_and_failed_requests_do_not_automatically_call_again(db):

@@ -42,7 +42,8 @@ async function dashboard(t, state = realState, member = undefined) {
     return elements.get(selector);
   };
   const control = {
-    state, calls: [], authCalls: [], member, stateError: null, conversionError: null,
+    state, calls: [], authCalls: [], jobCalls: [], convertResponses: [], jobResponses: [],
+    member, stateError: null, conversionError: null,
     result: {
       status: "PASS", provider: state.provider, fastExpression: "-rank(returns)",
       confidence: null, simulationSettings: {}, settingsSource: {}, validation: {}, warnings: [],
@@ -70,7 +71,17 @@ async function dashboard(t, state = realState, member = undefined) {
     if (url === "/api/convert") {
       control.calls.push(options);
       if (control.conversionError) throw control.conversionError;
+      control.onConvert?.();
+      if (control.convertResponses.length) {
+        const [body, status] = control.convertResponses.shift();
+        return response(body, status);
+      }
       return response(control.result, control.status || 200);
+    }
+    if (url.startsWith("/api/jobs/")) {
+      control.jobCalls.push({url, options});
+      const [body, status] = control.jobResponses.shift();
+      return response(body, status);
     }
     throw new Error(`Unexpected request: ${url}`);
   });
@@ -225,4 +236,39 @@ test("logout hides the dashboard and resets training consent", async t => {
   assert.equal(ui.element("#open-settings").hidden, true);
   await ui.submit();
   assert.equal(ui.control.calls.length, 0);
+});
+
+test("queued requests show a loading screen and claim with the same ID and body", async t => {
+  const realTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis, "setTimeout", (callback, ms, ...args) => realTimeout(callback, ms === 5000 ? 0 : ms, ...args));
+  const ui = await dashboard(t, realState, {status: "approved", role: "member"});
+  ui.control.convertResponses = [[{status: "queued", queuePosition: 4}, 202]];
+  ui.control.onConvert = () => {
+    if (ui.control.calls.length < 2) return;
+    assert.equal(ui.element("#result-loading").hidden, false);
+    assert.match(ui.element("#result-status").textContent, /대기열/);
+    assert.match(ui.element("#loading-description").textContent, /대기 순서 4번/);
+    assert.equal(ui.element("#submit-button").disabled, true);
+  };
+  await ui.submit();
+  assert.equal(ui.control.calls.length, 2);
+  assert.equal(ui.control.calls[0].body, ui.control.calls[1].body);
+  assert.equal(ui.control.calls[0].headers["Idempotency-Key"], ui.control.calls[1].headers["Idempotency-Key"]);
+  assert.equal(ui.control.jobCalls.length, 0);
+  assert.equal(ui.element("#result-status").textContent, "변환 완료");
+  assert.equal(ui.element("#submit-button").disabled, false);
+});
+
+test("a running job is only read, and a terminal error is never retried automatically", async t => {
+  const realTimeout = globalThis.setTimeout;
+  t.mock.method(globalThis, "setTimeout", (callback, ms, ...args) => realTimeout(callback, ms === 5000 ? 0 : ms, ...args));
+  const ui = await dashboard(t, realState, {status: "approved", role: "member"});
+  ui.control.convertResponses = [[{status: "queued", queuePosition: 1}, 202], [{status: "processing"}, 202]];
+  ui.control.jobResponses = [[{status: "processing"}, 202], [{detail: "이전 요청이 실패했거나 만료됐습니다."}, 409]];
+  await ui.submit();
+  assert.equal(ui.control.calls.length, 2);
+  assert.equal(ui.control.jobCalls.length, 2);
+  assert.equal(ui.control.jobCalls[0].options.method, undefined);
+  assert.match(ui.element("#error-message").textContent, /실패했거나 만료/);
+  assert.equal(ui.element("#result-error").hidden, false);
 });

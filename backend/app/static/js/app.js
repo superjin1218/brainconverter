@@ -81,7 +81,10 @@ class HarnessDashboard {
       if (expectedProvider !== "mock" && !trainingConsent) {
         throw new Error("Contributor 모델의 학습 활용 안내에 동의해 주세요.");
       }
-      const result = await this.api.convert(strategy, settings, expectedProvider, trainingConsent);
+      const result = await this.api.convert(
+        strategy, settings, expectedProvider, trainingConsent,
+        progress => this.view.showLoading(progress),
+      );
       if (expectedProvider && result.provider !== expectedProvider) {
         await this.localProvider.refresh();
         throw new Error("변환 중 AI 연결 상태가 변경됐습니다. 설정에서 연결 상태를 확인한 뒤 다시 시도하세요.");
