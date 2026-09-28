@@ -479,10 +479,12 @@ def test_budget_stop_or_unavailable_ledger_prevents_any_paid_call(site, budget, 
     assert SECRET not in result.text
 
 
+@pytest.mark.parametrize("accept", ["application/json", "text/html"])
 def test_provider_check_is_admin_only_and_never_reserves_usage_or_calls_inference(
-    site, monkeypatch
+    site, monkeypatch, accept
 ):
     client, state, _ = site
+    client.headers["accept"] = accept
     monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
     metadata_calls = []
     fake_ai_key = "private-fake-meta-key-never-a-real-key"
@@ -506,9 +508,21 @@ def test_provider_check_is_admin_only_and_never_reserves_usage_or_calls_inferenc
     state["status"] = "approved"
     response = client.get("/api/admin/provider-check")
     assert response.status_code == 200
-    assert response.json()["modelAvailable"] is True
-    assert response.json()["inferencePerformed"] is False
+    if accept == "text/html":
+        assert response.headers["content-type"].startswith("text/html")
+        assert "AI 연결 진단" in response.text
+        assert "&quot;modelAvailable&quot;: true" in response.text
+        assert "&quot;inferencePerformed&quot;: false" in response.text
+        assert "&quot;keyFingerprint&quot;" in response.text
+        assert "<script" not in response.text
+    else:
+        assert response.json()["modelAvailable"] is True
+        assert response.json()["inferencePerformed"] is False
+        fingerprint = response.json()["keyFingerprint"]
+        assert len(fingerprint) == 16 and set(fingerprint) <= set("0123456789abcdef")
     assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert "script-src 'self'" in response.headers["content-security-policy"]
     assert len(metadata_calls) == 1
     assert state["aiCalls"] == 0
     assert not any("brain_reserve" in path or "budget" in path for path, _ in state["calls"])
@@ -517,6 +531,15 @@ def test_provider_check_is_admin_only_and_never_reserves_usage_or_calls_inferenc
     state["status"] = "suspended"
     assert client.get("/api/admin/provider-check").status_code == 403
     assert len(metadata_calls) == 1
+
+
+def test_provider_diagnostic_html_escapes_values():
+    from backend.app.provider_diagnostics import diagnostic_html
+
+    report = diagnostic_html({"model": '<script>alert("unsafe")</script>'})
+    assert "<script>" not in report
+    assert "&lt;script&gt;" in report
+    assert "&lt;/script&gt;" in report
 
 
 def test_budget_endpoint_requires_admin_and_never_returns_credentials(site):

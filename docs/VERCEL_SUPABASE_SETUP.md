@@ -1,6 +1,6 @@
 # Vercel + Supabase 회원 사이트 설정
 
-2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. 승인받은 진단 버전 `896e2be`가 Vercel Production에 Ready 상태로 배포됐으며, 배포 서버의 Meta 모델 목록 조회는 200입니다. 기존 실제 변환의 404 원인은 아직 확인 중이며, 실제 AI 재검증은 별도 승인을 기다립니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
+2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. 승인받은 진단 버전 `896e2be`가 Vercel Production에 Ready 상태로 배포됐으며, 배포 서버의 Meta 모델 목록 조회는 200입니다. 추가 승인받은 실제 변환 1회는 Meta의 `404 / model_not_found`로 실패했습니다. 로컬과 서버 키·모델 접근 차이를 확인 중이며 실제 변환은 아직 해결되지 않았습니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
 
 ## 1. Supabase DB 적용
 
@@ -103,7 +103,31 @@ Meta `POST /v1/chat/completions` 404를 확인했습니다. Supabase 인증·승
 
 2026-09-28 09:30 KST 운영자 세션의 진단 요청이 배포 서버까지 도달했고, Vercel 로그에서 Meta `GET /v1/models` 200과 진단 경로 200을 확인했습니다. Chrome은 응답 화면을 `ERR_BLOCKED_BY_CLIENT`로 표시해 `modelAvailable` 값은 읽지 못했습니다. 따라서 키의 모델 목록 조회 인증·네트워크 연결은 확인했지만 Contributor 생성 권한이나 실제 생성 성공은 아직 확인한 것이 아닙니다. 미인증 별도 GET은 401로 차단됐습니다.
 
-진단 변경은 로컬 Python 테스트 297개 통과·SQL 관련 30개 건너뜀, 린트 통과를 확인했습니다. GitHub CI는 backend(PostgreSQL 포함)·frontend·gateway 모두 통과했습니다. 이번 변경은 DB 마이그레이션을 요구하지 않습니다. 진단 코드 배포는 승인 후 완료했으며, 실제 AI 검증은 별도 운영자 승인을 기다립니다.
+진단 버전 `896e2be`는 로컬 Python 테스트 297개 통과·SQL 관련 30개 건너뜀, 린트 통과를 확인했습니다. 해당 GitHub CI는 backend(PostgreSQL 포함)·frontend·gateway 모두 통과했습니다. 이번 변경은 DB 마이그레이션을 요구하지 않습니다. 진단 코드 배포와 승인받은 실제 AI 1회 검증은 완료했으며 실패 원인과 다음 비교는 아래에 기록합니다.
+
+### 승인받은 실제 변환 1회 결과와 다음 비교
+
+2026-09-28 09:34:59 KST 운영자 승인 후 단순 당일 수익률 역순위 전략으로
+실제 변환을 **1회만** 실행했습니다. 요청 ID는 `ccxwp-1790555699362-6bc5524baa8d`이며,
+배포 `dpl_AYRrKht34VAoGC5YUdmQ8BLpuqyw`의 로그에서 Supabase 인증·승인·변환 예약·
+예산 예약·결과 저장은 200, Meta 생성 요청은 404를 확인했습니다.
+안전한 오류 로그는
+`code=model_access http_status=404 upstream_code=model_not_found response_shape=json_error`
+입니다. 자동 재시도나 다른 모델 호출은 없었습니다.
+
+모델 ID `muse-spark-1.3-contributor`는 공식 문서와 일치합니다.
+Meta는 이 오류를 모델 ID 또는 팀의 모델 접근 문제로 안내하지만, 이 로그만으로
+키 불일치나 지역 제한을 단정할 수 없습니다. [Meta 오류 안내](https://dev.meta.ai/docs/error-handling).
+
+다음 진단 변경은 Chrome의 JSON 화면 차단 때문에 응답을 읽지 못한 문제를 줄이기 위해
+같은 `/api/admin/provider-check`에 HTML 표시를 추가합니다. 브라우저에서 열면 HTML,
+API 클라이언트에서는 JSON을 반환하며 관리자 승인 확인·캐시 금지·CSP·프레임 차단은 유지합니다.
+`keyFingerprint`는 저장된 API 키 SHA-256의 앞 16자리로, 로컬과 서버가 같은 키를 쓰는지
+비교하기 위한 값입니다. 키 원문은 반환하거나 로그에 남기지 않습니다.
+모델 목록 조회만 수행하므로 실제 AI 생성·변환 횟수·예산 예약이 없습니다.
+새 변경은 테스트 299개 통과·SQL 관련 30개 건너뜀·린트 통과했으며,
+아직 배포하지 않았습니다. 재배포 승인을 받은 뒤 무료 메타데이터 비교를 진행합니다.
+추가 실제 AI 요청은 새로운 승인 없이 실행하지 않습니다.
 
 ## 월 비용과 상시 운영
 
