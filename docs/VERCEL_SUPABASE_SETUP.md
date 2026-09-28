@@ -1,6 +1,6 @@
 # Vercel + Supabase 회원 사이트 설정
 
-2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. 승인받은 진단 버전 `896e2be`가 Vercel Production에 Ready 상태로 배포됐으며, 배포 서버의 Meta 모델 목록 조회는 200입니다. 추가 승인받은 실제 변환 1회는 Meta의 `404 / model_not_found`로 실패했습니다. 로컬과 서버 키·모델 접근 차이를 확인 중이며 실제 변환은 아직 해결되지 않았습니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
+2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. 승인받은 진단 버전 `2ed26fa`가 Vercel Production에 Ready 상태로 배포됐습니다. 로컬과 서버의 키 비교 ID는 동일하지만 서버의 Meta 모델 목록에는 Contributor가 없습니다. 추가 승인받은 실제 변환 1회도 Meta의 `404 / model_not_found`로 실패했습니다. 배포 서버의 모델 접근 문제는 아직 해결되지 않았으며 [문의용 진단 자료](META_SERVER_MODEL_ACCESS_REPORT.md)를 준비했습니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
 
 ## 1. Supabase DB 적용
 
@@ -66,7 +66,7 @@ Chrome에서 `HARNESS_PROVIDER=muse`, `MUSE_MODEL=meta/muse-spark-1.3-contributo
 
 기존 Supabase 서버 키를 `SUPABASE_SECRET_KEY`라는 **Secret 유형·Production 전용** 변수로 저장했고 Vercel 성공 알림을 확인했습니다. 로컬 시험에도 기존 키를 Git에서 제외된 `.env.local`에 저장했습니다. 키를 새로 생성·회전하지 않았습니다.
 
-현재 사용자의 키는 Meta 직접 발급 키입니다. Vercel Production에 `MUSE_API_PROVIDER=meta`와 Secret `META_API_KEY`가 저장돼 있습니다. 저장된 Secret의 원문은 다시 볼 수 없어 로컬 키와의 값 일치는 확인하지 못했지만, 배포 서버의 해당 키로 모델 목록 조회 200을 확인했습니다. 기존 `AI_API_KEY`는 별칭으로 지원하며 명시적인 Meta 키를 우선합니다. Meta 모드는 `META_API_KEY` → `AI_API_KEY`만 읽고 `https://api.meta.ai/v1/chat/completions`에 고정 연결합니다. 모델 식별자는 같은 Contributor 모델의 Meta 표기인 `muse-spark-1.3-contributor`로 전송합니다. [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions).
+현재 사용자의 키는 Meta 직접 발급 키입니다. Vercel Production에 `MUSE_API_PROVIDER=meta`와 Secret `META_API_KEY`가 저장돼 있습니다. Secret 원문을 조회하지 않고 SHA-256 비교 ID로 로컬과 서버 키가 같음을 확인했습니다. 양쪽 모델 목록 조회는 200이지만 Contributor는 로컬에서만 반환됐습니다. 기존 `AI_API_KEY`는 별칭으로 지원하며 명시적인 Meta 키를 우선합니다. Meta 모드는 `META_API_KEY` → `AI_API_KEY`만 읽고 `https://api.meta.ai/v1/chat/completions`에 고정 연결합니다. 모델 식별자는 같은 Contributor 모델의 Meta 표기인 `muse-spark-1.3-contributor`로 전송합니다. [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions).
 
 Vercel AI Gateway를 따로 선택하려면 `MUSE_API_PROVIDER=gateway`와 Vercel 발급 키를 설정합니다. 이 모드의 키 우선순위는 `AI_GATEWAY_API_KEY` → `AI_API_KEY` → `VERCEL_OIDC_TOKEN`입니다. OIDC는 Meta 직접 인증에 사용할 수 없습니다. [Vercel OIDC 안내](https://vercel.com/docs/ai-gateway/authentication-and-byok/oidc).
 
@@ -91,7 +91,7 @@ Meta `POST /v1/chat/completions` 404를 확인했습니다. Supabase 인증·승
 정상이며, 연결 방식은 `meta`, 고정 모델은 `meta/muse-spark-1.3-contributor`입니다.
 같은 날 로컬에 저장된 키의 `GET /v1/models`는 200으로 Contributor 모델을 반환했습니다.
 이 모델 목록 조회는 전략이나 프롬프트를 보내지 않으며 AI 생성을 하지 않습니다.
-서버 키의 실제 값 일치 여부와 배포 서버에서의 모델 접근 여부는 아직 확정하지 않았습니다.
+당시에는 서버 키 일치 여부와 서버 모델 접근 여부가 미확정이었으며, 아래 후속 진단으로 키 일치와 서버 목록의 Contributor 누락을 확인했습니다.
 
 진단 코드를 배포한 뒤 운영자로 로그인한 Chrome에서
 `/api/admin/provider-check`를 열어 **배포 서버의** Meta 모델 목록을 확인할 수 있습니다.
@@ -119,14 +119,43 @@ Meta `POST /v1/chat/completions` 404를 확인했습니다. Supabase 인증·승
 Meta는 이 오류를 모델 ID 또는 팀의 모델 접근 문제로 안내하지만, 이 로그만으로
 키 불일치나 지역 제한을 단정할 수 없습니다. [Meta 오류 안내](https://dev.meta.ai/docs/error-handling).
 
-다음 진단 변경은 Chrome의 JSON 화면 차단 때문에 응답을 읽지 못한 문제를 줄이기 위해
+후속 진단 변경은 Chrome의 JSON 화면 차단 때문에 응답을 읽지 못한 문제를 줄이기 위해
 같은 `/api/admin/provider-check`에 HTML 표시를 추가합니다. 브라우저에서 열면 HTML,
 API 클라이언트에서는 JSON을 반환하며 관리자 승인 확인·캐시 금지·CSP·프레임 차단은 유지합니다.
 `keyFingerprint`는 저장된 API 키 SHA-256의 앞 16자리로, 로컬과 서버가 같은 키를 쓰는지
 비교하기 위한 값입니다. 키 원문은 반환하거나 로그에 남기지 않습니다.
 모델 목록 조회만 수행하므로 실제 AI 생성·변환 횟수·예산 예약이 없습니다.
 새 변경은 테스트 299개 통과·SQL 관련 30개 건너뜀·린트 통과했으며,
-아직 배포하지 않았습니다. 재배포 승인을 받은 뒤 무료 메타데이터 비교를 진행합니다.
+GitHub CI의 backend(PostgreSQL 포함)·frontend·gateway도 모두 통과했습니다.
+2026-09-28 09:46 KST 운영자 재배포 승인 후 `2ed26fa`를 Production에 배포했습니다.
+배포 ID는 `dpl_5txMpR7RhucAqMCyuN28RxVwHuWt`이며 Ready와 기본 도메인 적용을 확인했습니다.
+관리자 HTML 진단 화면에서 다음 값을 읽었습니다.
+
+```json
+{
+  "apiProvider": "meta",
+  "model": "muse-spark-1.3-contributor",
+  "inferencePerformed": false,
+  "status": "failed",
+  "httpStatus": 200,
+  "modelAvailable": false,
+  "errorCode": "model_access",
+  "keyFingerprint": "aa0ecc064a45a9ec"
+}
+```
+
+직후 로컬에서 같은 키로 `GET /v1/models`를 다시 조회한 결과 200이며
+`muse-spark-1.3-contributor`가 포함됐습니다. 키 비교 ID도 동일하고 로컬 HTTP 프록시는
+설정되지 않았습니다. 이번 후속 진단은 서버 1회·로컬 1회 모델 목록 조회만 했고
+실제 AI 생성은 추가로 실행하지 않았습니다. Chrome에서 진단 결과가 보이지 않던 문제는
+해결됐으나 변환 실패는 아직 남아 있습니다.
+
+동일한 키·모델 주소에서 요청 환경에 따라 Meta의 모델 목록이 달라지는 현상까지
+확인했습니다. Meta의 지역/IP 판정 또는 카탈로그 라우팅 차이는 가능성이며 원인으로
+확정하지 않았습니다. 지역 설정·키·모델·제공자를 임의 변경하지 않았습니다.
+Meta 상태 화면은 `Status information is unavailable`을 표시했으므로 전체 서비스 장애도
+확정하지 않았습니다. [지원 문의 초안](META_SERVER_MODEL_ACCESS_REPORT.md)은 문서로만
+준비했으며 Meta에 전송하지 않았습니다.
 추가 실제 AI 요청은 새로운 승인 없이 실행하지 않습니다.
 
 ## 월 비용과 상시 운영
