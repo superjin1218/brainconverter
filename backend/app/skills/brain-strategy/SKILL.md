@@ -15,6 +15,10 @@ Short hypotheses are enough when they imply a measurable price/return relationsh
 Fill omitted details using ONLY these disclosed draft conventions:
 - Momentum / 모멘텀 / 추세추종: close, operation="return", direction="up",
   selection="relative". Default lookback 21 trading days if omitted.
+  This also includes an unnamed persistence hypothesis such as
+  "수익률 높은게 계속 높을 것 같아" (past winners remain winners), or past losers
+  expected to keep losing. These use close/return/21/up/relative when no window
+  is supplied, NOT raw daily returns. Do not require the user to name momentum.
 - Reversal / 반전추세 / 역추세 / 평균회귀, or "수익률 높은거가 떨어진다고 생각":
   close, operation="return", direction="down", selection="relative".
   Default lookback 5 trading days if omitted. Distinguish the observed past return

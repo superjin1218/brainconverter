@@ -1,6 +1,7 @@
 """Short hypotheses, independent provider errors, and refinement round trips."""
 
 import json
+from pathlib import Path
 
 import httpx
 import pytest
@@ -12,9 +13,24 @@ from backend.app.models import ConversionResponse, ConvertRequest, StrategyIR
 from backend.app.openai_policy import OPENAI_POLICY
 from backend.app.openai_provider import OpenAIProvider
 from backend.app.prompts import BASE_SYSTEM_PROMPT
+from backend.app.provider_diagnostics import diagnostic_runtime
 from backend.app.provider_types import ProviderResult
 from backend.app.service import HarnessService
 from backend.tests.provider_fixtures import FAKE_KEY, example_ir, reply
+
+
+@pytest.mark.parametrize("filename", ["hypotheses.py", "models.py", "SKILL.md"])
+def test_deployment_revision_tracks_interpretation_rules(monkeypatch, filename):
+    before = diagnostic_runtime()["providerSourceSha256"]
+    read_bytes = Path.read_bytes
+
+    def changed_rule(path):
+        content = read_bytes(path)
+        return content + b"\nchanged rule" if path.name == filename else content
+
+    monkeypatch.setattr(Path, "read_bytes", changed_rule)
+    after = diagnostic_runtime()["providerSourceSha256"]
+    assert before and after and before != after
 
 
 def period_ir(window=21, direction="up"):
@@ -36,6 +52,12 @@ def period_ir(window=21, direction="up"):
         ("수익률 높은거가 떨어진다고 생각하는 거야", 5, "down"),
         ("수익률이 낮은 종목이 반등할 것 같아", 5, "down"),
         ("모멘텀 전략", 21, "up"),
+        ("수익률 높은게 계속 높을 것 같아", 21, "up"),
+        ("수익률이 높은 게 계속 높을 것 같아", 21, "up"),
+        ("높은 수익률 종목이 계속 오를 것 같아", 21, "up"),
+        ("많이 오른 종목은 더 오를 것 같아", 21, "up"),
+        ("수익률 낮은게 계속 낮을 것 같아", 21, "up"),
+        ("최근 10일 수익률 높은게 계속 높을 것 같아", 10, "up"),
         ("반전 전략", 5, "down"),
         ("7일 반전 전략", 7, "down"),
         ("2주 모멘텀", 10, "up"),
@@ -107,6 +129,18 @@ async def test_defaults_are_disclosed_and_filter_window_does_not_become_lookback
     assert result.strategyIR.entry.window == 20
     assert any("기본값 5거래일" in item for item in result.assumptions)
     assert "직전 값을 유지" in result.strategyExplanation
+
+
+async def test_unnamed_momentum_is_not_confused_with_raw_daily_return_preference():
+    service = HarnessService(MockSemanticProvider())
+    hypothesis = await service.convert(ConvertRequest(strategy="수익률 높은게 계속 높을 것 같아"))
+    assert hypothesis.status == "PASS"
+    assert hypothesis.fastExpression == "rank((close / ts_delay(close, 21) - 1))"
+    assert any("기본값 21거래일" in item for item in hypothesis.assumptions)
+    assert "모멘텀" in hypothesis.strategyExplanation
+    assert hypothesis.refinementOptions
+    explicit_rule = await service.convert(ConvertRequest(strategy="수익률이 높은 종목에 높은 순위"))
+    assert explicit_rule.fastExpression == "rank(returns)"
 
 
 async def test_explicit_absolute_price_change_is_not_replaced_with_return():
@@ -193,7 +227,9 @@ async def test_openai_wire_contract_stays_one_call_and_accepts_new_operation():
         return httpx.Response(200, json=reply(content=period_ir().model_dump_json()))
 
     provider = OpenAIProvider(httpx.MockTransport(handler), api_key=FAKE_KEY)
-    result = await HarnessService(provider).convert(ConvertRequest(strategy="1달 모멘텀 전략"))
+    result = await HarnessService(provider).convert(
+        ConvertRequest(strategy="수익률 높은게 계속 높을 것 같아")
+    )
     assert len(calls) == 1
     assert result.status == "PASS"
     assert result.strategyExplanation and result.improvementSuggestions

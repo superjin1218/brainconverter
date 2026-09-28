@@ -622,5 +622,11 @@
     "strategy": "한 달 모멘텀. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
     "status": "PASS",
     "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank((close / ts_delay(close, 21) - 1)), -1)"
+  },
+  {
+    "id": "case-105",
+    "strategy": "수익률 높은게 계속 높을 것 같아",
+    "status": "PASS",
+    "expression": "rank((close / ts_delay(close, 21) - 1))"
   }
 ]

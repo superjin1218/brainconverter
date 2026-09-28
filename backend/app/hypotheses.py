@@ -83,6 +83,12 @@ def hypothesis_context(strategy: str) -> HypothesisContext:
     # Distinguish past winners expected to fall from a preference for past winners.
     winners = r"(?:수익률\s*(?:이|은|가)?\s*높|높은\s*수익률|많이\s*오른)"
     losers = r"(?:수익률\s*이?\s*낮|낮은\s*수익률|많이\s*떨어진)"
+    continuation = r"(?:계속|지속|이어|더)"
+    higher = r"(?:높(?:을|다|아|겠|게|고)|오르|오를|상승)"
+    lower = r"(?:낮(?:을|다|아|겠|게|고)|떨어|하락|내려)"
+    # A persistence hypothesis is momentum even when the user never names it.
+    momentum |= bool(re.search(winners + r".*" + continuation + r".*" + higher, signal_text))
+    momentum |= bool(re.search(losers + r".*" + continuation + r".*" + lower, signal_text))
     reversal |= bool(re.search(winners + r".*(?:떨어|하락|내려|되돌)", signal_text))
     reversal |= bool(re.search(losers + r".*(?:오를|오르|상승|반등)", signal_text))
     family = "reversal" if reversal else "momentum" if momentum else None

@@ -19,7 +19,7 @@ def diagnostic_runtime() -> dict:
     commit = os.getenv("VERCEL_GIT_COMMIT_SHA", "")
     try:
         digest = hashlib.sha256()
-        # Include every module controlling inference, policy, and model diagnostics.
+        # Include interpretation and compilation so deployment checks detect rule changes too.
         for name in (
             "provider.py",
             "chat_provider.py",
@@ -29,9 +29,16 @@ def diagnostic_runtime() -> dict:
             "provider_config.py",
             "provider_types.py",
             "provider_errors.py",
+            "models.py",
+            "hypotheses.py",
+            "compiler.py",
+            "service.py",
+            "strategy_guidance.py",
+            "prompts.py",
+            "skills/brain-strategy/SKILL.md",
         ):
             digest.update(name.encode() + b"\0")
-            digest.update(Path(__file__).with_name(name).read_bytes())
+            digest.update((Path(__file__).parent / name).read_bytes())
         provider_hash = digest.hexdigest()
     except OSError:
         provider_hash = None
