@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 from backend.app.config import AppConfig
 from backend.app.main import create_app
 from backend.app.membership import ACCESS_COOKIE, REFRESH_COOKIE, same_origin
-from backend.app.provider import MockSemanticProvider
+from backend.app.provider import MockSemanticProvider, MuseSparkProvider
+from backend.app.service import HarnessService
 
 ORIGIN = "https://brain.example.test"
 HEADERS = {"origin": ORIGIN, "x-requested-with": "brain-site"}
@@ -476,6 +477,46 @@ def test_budget_stop_or_unavailable_ledger_prevents_any_paid_call(site, budget, 
     finish = [body for path, body in state["calls"] if path.endswith("brain_finish")]
     assert finish[-1]["p_failed"] is True
     assert SECRET not in result.text
+
+
+def test_provider_check_is_admin_only_and_never_reserves_usage_or_calls_inference(
+    site, monkeypatch
+):
+    client, state, _ = site
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    metadata_calls = []
+    fake_ai_key = "private-fake-meta-key-never-a-real-key"
+
+    def handler(request):
+        metadata_calls.append(request)
+        assert request.method == "GET"
+        assert str(request.url) == "https://api.meta.ai/v1/models"
+        assert not request.content
+        return httpx.Response(200, json={"data": [{"id": "muse-spark-1.3-contributor"}]})
+
+    provider = MuseSparkProvider(httpx.MockTransport(handler), api_key=fake_ai_key)
+    client.app.state.harness_service = HarnessService(provider)
+    assert client.get("/api/admin/provider-check").status_code == 401
+    connect(client)
+    state["status"] = "approved"
+    assert client.get("/api/admin/provider-check").status_code == 403
+    state.update(status="pending", role="admin")
+    assert client.get("/api/admin/provider-check").status_code == 403
+    assert metadata_calls == []
+    state["status"] = "approved"
+    response = client.get("/api/admin/provider-check")
+    assert response.status_code == 200
+    assert response.json()["modelAvailable"] is True
+    assert response.json()["inferencePerformed"] is False
+    assert response.headers["cache-control"] == "no-store"
+    assert len(metadata_calls) == 1
+    assert state["aiCalls"] == 0
+    assert not any("brain_reserve" in path or "budget" in path for path, _ in state["calls"])
+    for value in (fake_ai_key, ACCESS, REFRESH, SECRET, PASSWORD):
+        assert value not in response.text
+    state["status"] = "suspended"
+    assert client.get("/api/admin/provider-check").status_code == 403
+    assert len(metadata_calls) == 1
 
 
 def test_budget_endpoint_requires_admin_and_never_returns_credentials(site):

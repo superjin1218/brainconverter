@@ -15,7 +15,7 @@ from .config import AppConfig
 from .local_provider import local_provider_router, require_local_conversion
 from .membership import ACCESS_COOKIE, MembershipService, auth_router, same_origin
 from .models import ConversionResponse, ConvertRequest
-from .provider import MUSE_MODEL, SemanticProvider, build_provider, muse_api_key
+from .provider import MUSE_MODEL, MuseSparkProvider, SemanticProvider, build_provider, muse_api_key
 from .security import BodyLimitMiddleware, GatewayVerifier
 from .service import HarnessService
 
@@ -269,6 +269,19 @@ def create_app(
             raise HTTPException(404)
         await membership.identify(request, admin=True)
         return await membership.rpc("brain_budget_status", request.cookies[ACCESS_COOKIE])
+
+    @application.get("/api/admin/provider-check")
+    async def provider_check(request: Request):
+        if resolved_config.auth_mode != "supabase":
+            raise HTTPException(404)
+        await membership.identify(request, admin=True)
+        try:
+            provider = harness_service().provider
+        except RuntimeError:
+            raise HTTPException(503, "서버의 AI 연결 설정을 확인하세요.") from None
+        if not isinstance(provider, MuseSparkProvider):
+            raise HTTPException(503, "Muse 연결 진단을 사용할 수 없습니다.")
+        return await provider.check_connection()
 
     application.mount(
         "/", StaticFiles(directory=resolved_config.static_directory, html=True), name="static"

@@ -11,6 +11,7 @@ MESSAGES = {
         "AI 서비스가 현재 IP의 접근을 허용하지 않습니다. 프로젝트 IP 설정을 확인하세요."
     ),
     "model_access": "설정된 모델에 접근할 수 없습니다. 프로젝트의 모델 사용 권한을 확인하세요.",
+    "not_found": "AI API 경로 또는 리소스를 찾을 수 없습니다. 서버 연결 설정을 확인하세요.",
     "credits": "AI 서비스 API 크레딧이 소진됐습니다. API 결제 페이지에서 잔액을 확인하세요.",
     "spend_limit": "AI 서비스 지출 한도에 도달했습니다. 프로젝트·조직의 한도를 확인하세요.",
     "usage_limit": "AI 서비스 API 사용 한도에 도달했습니다. 계정의 사용 한도를 확인하세요.",
@@ -27,11 +28,23 @@ MESSAGES = {
     "invalid_response": "AI 응답이 코드 변환 형식에 맞지 않았습니다. 전략을 명확하게 적어 주세요.",
 }
 
+# Do not log arbitrary upstream strings: they may contain prompts or credentials.
+SAFE_UPSTREAM_CODES = frozenset({
+    "invalid_api_key", "billing_not_configured", "model_not_found", "file_not_found",
+    "credit_balance_exhausted", "insufficient_credits", "organization_spend_limit_exceeded",
+    "project_spend_limit_exceeded", "organization_usage_limit_exceeded", "insufficient_quota",
+    "ip_not_authorized", "rate_limit_exceeded", "server_shutting_down", "service_overloaded",
+    "backend_unavailable", "payload_too_large", "gateway_timeout", "unsupported_parameter",
+})
+
 
 class ProviderError(RuntimeError):
     def __init__(self, code: str, *, retryable: bool = False) -> None:
         self.code = code if code in MESSAGES else "invalid_response"
         self.retryable = retryable
+        self.http_status: int | None = None
+        self.upstream_code = "none"
+        self.response_shape = "none"
         super().__init__(MESSAGES[self.code])
 
 
@@ -45,25 +58,40 @@ def http_provider_error(response: httpx.Response) -> ProviderError:
     except ValueError:
         error = {}
     code, error_type = error.get("code"), error.get("type")
+
+    def failure(kind: str, *, retryable: bool = False) -> ProviderError:
+        result = ProviderError(kind, retryable=retryable)
+        result.http_status = response.status_code
+        result.upstream_code = (
+            code if isinstance(code, str) and code in SAFE_UPSTREAM_CODES
+            else "none" if code is None else "other"
+        )
+        result.response_shape = (
+            "empty" if not response.content else "json_error" if error else "other"
+        )
+        return result
+
     if code in ("credit_balance_exhausted", "insufficient_credits") or response.status_code == 402:
-        return ProviderError("credits")
+        return failure("credits")
     if code in ("organization_spend_limit_exceeded", "project_spend_limit_exceeded"):
-        return ProviderError("spend_limit")
+        return failure("spend_limit")
     if code == "organization_usage_limit_exceeded":
-        return ProviderError("usage_limit")
+        return failure("usage_limit")
     if code == "insufficient_quota" or error_type == "insufficient_quota":
-        return ProviderError("quota")
+        return failure("quota")
     if code == "ip_not_authorized":
-        return ProviderError("ip_restricted")
-    if code == "model_not_found" or response.status_code == 404:
-        return ProviderError("model_access")
+        return failure("ip_restricted")
+    if code == "model_not_found":
+        return failure("model_access")
+    if response.status_code == 404:
+        return failure("not_found")
     if response.status_code == 401:
-        return ProviderError("authentication")
+        return failure("authentication")
     if response.status_code == 403:
-        return ProviderError("permission")
+        return failure("permission")
     if response.status_code == 429:
         # Do not amplify throttling with automatic retries.
-        return ProviderError("rate_limit")
+        return failure("rate_limit")
     if response.status_code >= 500:
-        return ProviderError("upstream", retryable=True)
-    return ProviderError("invalid_request")
+        return failure("upstream", retryable=True)
+    return failure("invalid_request")

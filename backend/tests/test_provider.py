@@ -86,7 +86,8 @@ async def test_truncated_response_stops_without_spending_on_a_second_request():
         (401, "invalid_api_key", None, "authentication"),
         (403, None, None, "permission"),
         (403, "ip_not_authorized", None, "ip_restricted"),
-        (404, None, None, "model_access"),
+        (404, None, None, "not_found"),
+        (404, "model_not_found", None, "model_access"),
         (400, "model_not_found", None, "model_access"),
         (400, "unsupported_parameter", None, "invalid_request"),
         (429, "credit_balance_exhausted", None, "credits"),
@@ -166,6 +167,29 @@ async def test_persistent_server_error_stops_after_one_retry(caplog):
     for private_value in (FAKE_KEY, PRIVATE_DETAIL, PRIVATE_STRATEGY):
         assert private_value not in str(exc.value)
         assert private_value not in caplog.text
+
+
+@pytest.mark.parametrize(("body", "kind", "shape", "upstream"), [
+    (None, "not_found", "empty", "none"),
+    ({"error": {"code": "model_not_found", "message": PRIVATE_DETAIL}},
+     "model_access", "json_error", "model_not_found"),
+    ({"error": {"code": FAKE_KEY, "message": PRIVATE_STRATEGY}},
+     "not_found", "json_error", "other"),
+])
+async def test_not_found_diagnostics_distinguish_model_and_routing_without_leaks(
+    body, kind, shape, upstream, caplog
+):
+    def handler(_):
+        return httpx.Response(404, **({"json": body} if body is not None else {"content": b""}))
+
+    with pytest.raises(ProviderError) as exc:
+        await OpenAIChatProvider(httpx.MockTransport(handler), api_key=FAKE_KEY).interpret(
+            "JSON", PRIVATE_STRATEGY
+        )
+    assert exc.value.code == kind
+    assert f"http_status=404 upstream_code={upstream} response_shape={shape}" in caplog.text
+    for value in (FAKE_KEY, PRIVATE_DETAIL, PRIVATE_STRATEGY):
+        assert value not in caplog.text
 
 
 @pytest.mark.parametrize(

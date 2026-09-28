@@ -148,3 +148,68 @@ def test_hosted_app_cannot_use_mock_when_app_env_is_missing(
     monkeypatch.setenv("HARNESS_PROVIDER", "mock")
     with pytest.raises(RuntimeError, match="실제 모델"):
         build_provider()
+
+
+@pytest.mark.parametrize("available", [True, False])
+async def test_meta_connection_check_reads_catalog_once_without_inference(monkeypatch, available):
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        assert request.method == "GET"
+        assert str(request.url) == "https://api.meta.ai/v1/models"
+        assert request.headers["authorization"] == f"Bearer {FAKE_KEY}"
+        assert not request.content
+        return httpx.Response(200, json={"data": [
+            {"id": META_MUSE_MODEL if available else "muse-spark-1.3"},
+        ]})
+
+    provider = MuseSparkProvider(httpx.MockTransport(handler), api_key=FAKE_KEY)
+    result = await provider.check_connection()
+    assert len(calls) == 1
+    assert result["inferencePerformed"] is False
+    assert result["modelAvailable"] is available
+    assert result["status"] == ("ok" if available else "failed")
+    assert FAKE_KEY not in json.dumps(result)
+
+
+@pytest.mark.parametrize("status", [401, 403, 404, 429, 503])
+async def test_meta_catalog_errors_never_retry_or_reflect_private_body(monkeypatch, status):
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    calls = []
+
+    def handler(request):
+        calls.append(request)
+        return httpx.Response(status, json={"error": {
+            "code": FAKE_KEY, "type": FAKE_KEY, "message": FAKE_KEY,
+        }})
+
+    provider = MuseSparkProvider(httpx.MockTransport(handler), api_key=FAKE_KEY)
+    result = await provider.check_connection()
+    assert len(calls) == 1
+    assert result["httpStatus"] == status
+    assert result["status"] == "failed"
+    assert result["upstreamCode"] == "other"
+    assert FAKE_KEY not in json.dumps(result)
+
+
+@pytest.mark.parametrize("response", [
+    httpx.Response(200, content="not JSON"),
+    httpx.Response(200, json={"data": "invalid"}),
+    httpx.Response(200, json={"data": [{"id": None}]}),
+])
+async def test_meta_catalog_invalid_responses_fail_safely(monkeypatch, response):
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    provider = MuseSparkProvider(httpx.MockTransport(lambda _: response), api_key=FAKE_KEY)
+    result = await provider.check_connection()
+    assert result["errorCode"] == "invalid_response"
+    assert result["inferencePerformed"] is False
+
+
+async def test_gateway_catalog_check_never_switches_provider_or_calls_ai():
+    calls = []
+    provider = MuseSparkProvider(httpx.MockTransport(lambda request: calls.append(request)),
+                                api_key=FAKE_KEY)
+    assert (await provider.check_connection())["status"] == "unavailable"
+    assert calls == []

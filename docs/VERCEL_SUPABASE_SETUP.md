@@ -1,6 +1,6 @@
 # Vercel + Supabase 회원 사이트 설정
 
-2026-09-27 기준. **Supabase DB·운영자 로그인과 Meta Contributor 실제 변환 2건을 확인했습니다. Vercel Production에 Meta 직접 연결 설정을 저장했으며 배포는 운영자 승인 대기입니다.** 일반 회원용 Custom SMTP와 배포 후 확인이 남았습니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
+2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. Vercel Production `c5f45cd`는 Ready이며 배포 사이트 로그인도 정상입니다. 배포 서버의 Meta 변환은 404로 실패해 아래 진단 절차로 원인을 확인 중입니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
 
 ## 1. Supabase DB 적용
 
@@ -76,13 +76,32 @@ Vercel AI Gateway를 따로 선택하려면 `MUSE_API_PROVIDER=gateway`와 Verce
 
 ### 재배포 전 빌드 준비 (2026-09-28)
 
-첫 배포 시 `uv lock`이 `No project table found`로 실패했습니다. `pyproject.toml`에 프로젝트 메타데이터와 `requirements.txt`와 동일한 런타임 의존성 4개를 추가하고 `uv.lock`을 생성했습니다. 로컬 Python 3.12의 별도 환경에서 `uv lock`과 `uv sync --locked --no-dev`, `app.py` 로딩을 확인했습니다. 정적 파일 존재와 운영 API 문서 비공개도 확인했으며 실제 AI 제공자는 초기화하지 않았습니다. 실제 Vercel 빌드 성공은 재배포 후 확인해야 합니다.
+첫 배포 시 `uv lock`이 `No project table found`로 실패했습니다. `pyproject.toml`에 프로젝트 메타데이터와 `requirements.txt`와 동일한 런타임 의존성 4개를 추가하고 `uv.lock`을 생성했습니다. 로컬 Python 3.12의 별도 환경에서 `uv lock`과 `uv sync --locked --no-dev`, `app.py` 로딩을 확인했습니다. 정적 파일 존재와 운영 API 문서 비공개도 확인했으며 이 로컬 빌드 확인에서는 실제 AI 제공자를 초기화하지 않았습니다. 2026-09-28 Chrome에서 Vercel Production `c5f45cd`의 Ready 상태를 확인했습니다.
 
 Vercel의 Ignored Build Step은 `Automatic`으로 저장했으며, 저장소의 `git.deploymentEnabled=false`는 유지합니다. GitHub 수정 반영만으로 재배포하지 않습니다. 재배포 시 기존 실패 배포의 **Redeploy** 대신 **Deployments → Deployments actions → Create Deployment → main**에서 새 수정 커밋을 확인하고 **Deploy to Production**을 선택하세요. SQL 004는 운영 DB에 적용하지 않았습니다.
 
 초기에는 **Ignored Build Step: Don’t build anything (`exit 0`)**으로 배포를 중지했습니다. 승인된 수동 배포를 위해 현재는 `Automatic`으로 변경했습니다. 저장소의 `vercel.json`에는 `git.deploymentEnabled=false`를 유지하여 모든 브랜치의 Git 자동 배포를 차단합니다. GitHub 코드 저장과 수동 웹사이트 배포는 별개입니다. [Vercel Git 배포 설정](https://vercel.com/docs/project-configuration/git-configuration#turning-off-all-automatic-deployments).
 
-환경변수·SMTP·DB와 검증 결과를 확인한 후 **배포 직전에 운영자 승인을 받습니다.** 현재 요청 범위는 재배포 전 준비까지이며 재배포는 실행하지 않습니다. 향후 자동 배포를 원할 때 `git.deploymentEnabled`를 `true`로 변경하며, 수동 배포 승인과 향후 자동 배포 허용은 별개입니다. 가입→인증→승인 대기→운영자 승인→단순 전략 한 번 변환→이용 중지 차단을 확인합니다. 실제 유료 AI 변환은 사용자가 별도로 실행하고, 에이전트는 운영 DB 변경 없이 허용된 확인만 진행합니다. BRAIN Simulate는 사용자가 별도로 실행합니다.
+환경변수·DB와 검증 결과를 확인한 후 **재배포 직전에 운영자 승인을 받습니다.** 최신 진단 변경은 아직 운영 사이트에 적용하지 않았습니다. 향후 자동 배포를 원할 때 `git.deploymentEnabled`를 `true`로 변경하며, 수동 배포 승인과 향후 자동 배포 허용은 별개입니다. 회원 계정 발급→운영자 승인→로그인→단순 전략 한 번 변환→이용 중지 차단을 확인합니다. 실제 유료 AI 변환은 사용자가 별도로 승인한 경우에만 실행합니다. BRAIN Simulate는 사용자가 별도로 실행합니다.
+
+## 배포 후 Meta 404 진단 (2026-09-28)
+
+Chrome에서 Production `c5f45cd`의 Ready 상태와 실제 `/api/convert` 요청 2건의
+Meta `POST /v1/chat/completions` 404를 확인했습니다. Supabase 인증·승인·한도 조회는
+정상이며, 연결 방식은 `meta`, 고정 모델은 `meta/muse-spark-1.3-contributor`입니다.
+같은 날 로컬에 저장된 키의 `GET /v1/models`는 200으로 Contributor 모델을 반환했습니다.
+이 모델 목록 조회는 전략이나 프롬프트를 보내지 않으며 AI 생성을 하지 않습니다.
+서버 키의 실제 값 일치 여부와 배포 서버에서의 모델 접근 여부는 아직 확정하지 않았습니다.
+
+승인 후 진단 코드를 재배포하면 운영자로 로그인한 Chrome에서
+`/api/admin/provider-check`를 열어 **배포 서버의** Meta 모델 목록을 확인할 수 있습니다.
+이 경로는 승인된 관리자만 접근할 수 있고, 키·원문 오류·다른 모델 목록을 반환하지 않습니다.
+변환 횟수·예산을 예약하지 않으며 자동 재시도나 실제 AI 생성도 하지 않습니다.
+`httpStatus=200`과 `modelAvailable=true`면 해당 서버 키의 모델 목록에 Contributor가 포함됨을 확인합니다. 실제 생성 성공은 별도 검증이 필요합니다.
+실제 변환 로그에는 HTTP 상태·허용 목록에 포함된 공급자 오류 코드·응답 종류만 남깁니다.
+일반 404와 명시적 `model_not_found`를 구분하며 비밀키·전략·원문 오류는 기록하지 않습니다.
+
+진단 변경은 로컬 Python 테스트 297개 통과·SQL 관련 30개 건너뜀, 린트 통과를 확인했습니다. 이번 변경은 DB 마이그레이션을 요구하지 않습니다. 진단 코드의 재배포와 실제 AI 검증은 각각 운영자 승인 후 진행합니다.
 
 ## 월 비용과 상시 운영
 

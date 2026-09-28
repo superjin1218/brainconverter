@@ -186,7 +186,10 @@ class OpenAIChatProvider:
         except TimeoutError:
             failure = ProviderError("timeout")
         # Never propagate provider bodies, strategy text or credentials to logs/clients.
-        logging.getLogger("uvicorn.error").warning("AI request failed code=%s", failure.code)
+        logging.getLogger("uvicorn.error").warning(
+            "AI request failed code=%s http_status=%s upstream_code=%s response_shape=%s",
+            failure.code, failure.http_status, failure.upstream_code, failure.response_shape,
+        )
         raise failure from None
 
 
@@ -229,6 +232,52 @@ class MuseSparkProvider(OpenAIChatProvider):
     def validate_response_model(self, data: dict) -> None:
         if data.get("model") not in {None, MUSE_MODEL, "muse-spark-1.3-contributor"}:
             raise ProviderError("model_access")
+
+    async def check_connection(self) -> dict:
+        """Read model availability only; never send a prompt or reserve conversion usage."""
+        result = {
+            "apiProvider": self.api_provider,
+            "model": self.model,
+            "inferencePerformed": False,
+        }
+        if self.api_provider != "meta":
+            return {**result, "status": "unavailable", "errorCode": "catalog_check_unavailable"}
+        http_status = None
+        try:
+            async with httpx.AsyncClient(timeout=5, transport=self.transport) as client:
+                response = await client.get(
+                    "https://api.meta.ai/v1/models",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+            http_status = response.status_code
+            if response.is_error:
+                raise http_provider_error(response)
+            data = response.json()
+            models = data.get("data") if isinstance(data, dict) else None
+            if not isinstance(models, list) or any(
+                not isinstance(item, dict) or not isinstance(item.get("id"), str)
+                for item in models
+            ):
+                raise ProviderError("invalid_response")
+            available = any(item["id"] == self.model for item in models)
+            return {
+                **result, "status": "ok" if available else "failed",
+                "httpStatus": http_status, "modelAvailable": available,
+                "errorCode": None if available else "model_access",
+            }
+        except httpx.TimeoutException:
+            failure = ProviderError("timeout")
+        except httpx.HTTPError:
+            failure = ProviderError("connection")
+        except ValueError:
+            failure = ProviderError("invalid_response")
+        except ProviderError as exc:
+            failure = exc
+        return {
+            **result, "status": "failed", "httpStatus": http_status,
+            "errorCode": failure.code, "upstreamCode": failure.upstream_code,
+            "responseShape": failure.response_shape,
+        }
 
 
 class MockSemanticProvider:
