@@ -1,25 +1,35 @@
-# 현재 구조 (2026-09-27)
+# 현재 구조 (2026-09-28)
 
-브라우저 → Vercel FastAPI → Supabase Auth 신원 확인 → DB 승인·쿼터 확인 → Muse Spark 1.3 Contributor 1회 → Python 검사·컴파일 → FASTEXPR + 12개 설정.
+브라우저 → Vercel FastAPI → Supabase 신원·승인 확인 → 작업/예산 예약 → OpenAI GPT 1회 → Python 검사·컴파일 → FASTEXPR + 12개 설정.
+
+## 모델 정책과 연결
+
+`openai_policy.py`는 GPT-5.4 mini·`none`·일반/캐시 입력과 출력 단가를 관리합니다. 출력은 1,024토큰, 직렬화 요청은 16,000바이트로 제한합니다. 추론·출력 상한은 `frozen=True`, `init=False` 필드이며 요청·환경변수로 올릴 수 없습니다.
+
+`provider_config.py`는 OpenAI 키와 고정 엔드포인트를 결정합니다. `OPENAI_API_KEY`만 읽습니다. 타임아웃은 최대 35초입니다. 모델이 고정 정책과 다르면 호출 전에 차단합니다.
+
+`chat_provider.py`는 한 번의 HTTP 생성 요청·응답 검사·오류 처리를 공유합니다. `openai_provider.py`는 OpenAI의 모델·캐시 비용·읽기 전용 진단을 담당하고 `provider.py`는 공급자를 조립합니다. 구조화 출력 스키마는 `response_schema.py`, 개발용 mock은 `mock_provider.py`, 결과 형식은 `provider_types.py`에 있습니다. 운영 환경에서는 mock을 차단합니다. 자동 재시도·대체 모델 호출은 없습니다.
 
 ## 해석과 생성
 
-`backend/app/skills/brain-strategy/SKILL.md`의 본문이 모델 시스템 지침입니다. 모델은 StrategyIR JSON을 반환하며 최종 코드는 Python 컴파일러가 생성합니다. 기존 숫자·방향·필터·원문 보존 검사는 유지합니다. 다수결·합의율·병렬 에이전트 호출은 실행하지 않습니다. confidence는 호환 필드로 null이며 모델 품질 점수가 아닙니다.
-
-Gateway Chat Completions에 모델과 Meta 제공자를 고정합니다. `OPENAI_API_KEY`는 읽지 않습니다. 출력 최대 1,024토큰, 요청 1회, 자동 재시도 없음, 모델 타임아웃 최대 35초입니다.
+`backend/app/skills/brain-strategy/SKILL.md`의 본문이 모델 시스템 지침입니다. 모델은 StrategyIR JSON을 반환하며 `service.py`가 원문 조건을 검사하고 `compiler.py`가 최종 FASTEXPR을 생성합니다. confidence는 기존 응답과의 호환성을 위한 null 필드입니다.
 
 ## 인증과 권한
 
-FastAPI가 Supabase password Auth를 중계하고 access/refresh 토큰을 HttpOnly 쿠키에만 담습니다. 클라이언트에는 사용자 이메일·이름·승인 상태·역할만 반환합니다. 변환 및 운영자 API마다 원격 getUser로 신원을 확인하고 DB 함수로 상태·역할을 조회합니다. 회원가입 metadata는 이름만 저장하며 권한으로 신뢰하지 않습니다.
+FastAPI가 Supabase password Auth를 중계하고 access/refresh 토큰을 HttpOnly 쿠키에 담습니다. API마다 원격 getUser와 DB 함수로 승인·역할을 검사합니다. 가입 metadata는 권한으로 신뢰하지 않습니다. approved 회원만 변환하고 approved/admin만 회원 관리·연결 진단을 수행합니다.
 
-가입자는 이메일 인증 후에도 pending입니다. approved만 변환하며 approved/admin만 회원 관리가 가능합니다. 쿠키 변경·변환·회원 변경에는 동일 Origin과 고정 요청 헤더를 요구합니다. 운영자 본인·다른 운영자의 상태는 회원 화면에서 변경할 수 없습니다.
+`AUTH_MODE`는 `supabase` 또는 개발용 `none`만 허용합니다. 운영에서 `none`을 차단합니다. 개발용 키 변경·무인증 변환은 loopback 클라이언트·호스트·Origin을 확인합니다.
 
-## DB 사용량과 중복 요청
+## 작업·대기열·비용
 
-private 스키마 테이블은 RLS를 켜고 anon/authenticated의 직접 접근을 철회합니다. 고정 search_path의 SECURITY DEFINER 함수는 명시적으로 자신의 신원·승인·운영자 여부를 검사합니다. 서버 전용 함수는 service_role만 실행합니다.
+`conversion.py`의 `ConversionCoordinator`가 HTTP 요청 이후의 변환 흐름을 조정합니다. `MemberJob`이 동일한 요청 ID·입력 해시로 슬롯 예약·예산 예약·결과 저장을 수행합니다. 슬롯을 실제 획득한 요청만 실패 또는 완료를 기록합니다.
 
-서버는 검증한 사용자 ID와 요청 해시를 예약 함수에 전달합니다. 전역 advisory transaction lock으로 쿼터 확인과 삽입을 직렬화합니다. UUID 요청 ID 재사용은 본인·동일 입력에만 가능하며 진행 조회 또는 24시간 내 완료 결과를 반환합니다. 다른 입력·사용자의 ID는 충돌 처리합니다. 실패·만료 요청은 자동 새 호출하지 않습니다.
+DB는 전역 잠금으로 승인·쿼터·실행 슬롯을 원자적으로 확인합니다. 실행 슬롯은 20개이며 초과 요청은 대기합니다. 브라우저는 5초 간격으로 같은 ID/본문을 재확인하고 실행 중인 요청은 읽기 전용 결과 조회만 합니다. 대기는 2분 뒤 만료되고 전체 최대 대기 시간은 10분입니다. 동일 요청의 결과는 24시간 재사용합니다.
 
-실행 슬롯은 전체 20개입니다. 초과 요청은 `queued` 상태로 같은 잠금 안에서 순서를 배정합니다. 브라우저가 5초마다 동일 입력·ID로 `brain_reserve`를 확인하고 빈 슬롯을 확보한 한 요청만 `reserved`를 받아 AI를 호출합니다. 실행 중인 요청의 중복 확인은 `running`으로 반환하고 결과만 조회합니다. 서버 함수는 대기 동안 계속 실행되지 않으며 별도 워커가 없습니다. 화면을 닫으면 2분 후 대기가 만료되고 전체 대기는 최대 10분입니다. 실행 제한 시간은 대기 시작과 분리한 `running_at`부터 계산합니다.
+유료 생성 전에 누적 예산을 예약합니다. 004 마이그레이션 이후 새 요청은 34원을 예약하며 과거 누적액과 예약 기록을 유지합니다. 실패·월 변경·회원 삭제로 초기화하지 않습니다. 공급자 실제 청구액과 앱 예약액의 차이는 [AI_BUDGET.md](AI_BUDGET.md)를 따릅니다.
 
-설정 파일·모델 키는 서버에서만 읽습니다. 과거 Cloudflare HMAC·Gateway 코드는 기록으로 남아 있지만 현재 회원 화면과 연결된 지원 배포 방식이 아닙니다. 이전 클라우드 배포 workflow도 비활성화했으며 Vercel/Supabase 운영 구성에는 사용하지 않습니다.
+## 프런트엔드와 배포
+
+API 요청·세션·대기 상태는 `api.js`, 모델 연결 상태는 `provider.js`, 회원/운영자 화면은 `membership.js`가 소유합니다. 대시보드는 메서드를 통해 상태를 변경합니다. 현재 서버가 제공하지 않는 이전 `/api/admin/usage` 패널은 제거했습니다.
+
+현재 배포 경로는 `app.py`와 `vercel.json`이며 `scripts/deploy_openai.py`가 검증·환경변수 등록·배포 후 확인을 묶습니다. [OpenAI 배포 준비](OPENAI_DEPLOYMENT.md)를 따릅니다. Cloudflare Worker·Cloud Run 배포 스크립트·HMAC 인증과 해당 CI는 제거했으며 Git 이력에서 확인할 수 있습니다. 실제 호출 경로는 OpenAI뿐입니다.

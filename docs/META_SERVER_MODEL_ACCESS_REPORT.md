@@ -1,5 +1,7 @@
 # Meta 서버 모델 접근 차이 진단
 
+> 이 문서는 이전 시점의 조사·결정 기록입니다. 현재 코드는 GPT 전용이며 Meta 연결과 Contributor 동의 코드는 제거했습니다. 현재 모델·설정은 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md)를 확인하세요.
+
 2026-09-28 기준. 실제 변환 실패는 아직 해결되지 않았습니다.
 아래 문의 초안은 Meta에 전송하지 않았습니다. 운영자가 검토 후
 [Meta 지원](https://dev.meta.ai/support)에 접수할 수 있습니다.

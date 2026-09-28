@@ -1,29 +1,28 @@
-import hashlib
-import hmac
-import json
-import os
-import time
-
+import pytest
 from fastapi.testclient import TestClient
 
-os.environ["APP_ENV"] = "development"
-os.environ["HARNESS_PROVIDER"] = "mock"
-os.environ["AUTH_MODE"] = "none"  # This file explicitly exercises the unauthenticated mock API.
-
-from backend.app.config import AppConfig  # noqa: E402, I001
-from backend.app.main import app, create_app  # noqa: E402, I001
-from backend.app.provider import MockSemanticProvider  # noqa: E402, I001
+from backend.app.config import AppConfig
+from backend.app.main import create_app
+from backend.app.mock_provider import MockSemanticProvider
 
 
-client = TestClient(
-    app,
-    base_url="http://127.0.0.1",
-    client=("127.0.0.1", 50000),
-    headers={"origin": "http://127.0.0.1", "x-requested-with": "brain-site"},
-)
+@pytest.fixture
+def client():
+    config = AppConfig(
+        environment="development",
+        auth_mode="none",
+        static_directory=AppConfig.from_environment().static_directory,
+    )
+    with TestClient(
+        create_app(config, provider_factory=MockSemanticProvider),
+        base_url="http://127.0.0.1",
+        client=("127.0.0.1", 50000),
+        headers={"origin": "http://127.0.0.1", "x-requested-with": "brain-site"},
+    ) as site:
+        yield site
 
 
-def test_health_and_dashboard_are_served():
+def test_health_and_dashboard_are_served(client):
     health = client.get("/api/health")
     assert health.status_code == 200
     assert health.json()["status"] == "ok"
@@ -34,7 +33,7 @@ def test_health_and_dashboard_are_served():
     assert client.get("/js/provider.js").headers["cache-control"] == "no-store"
 
 
-def test_convert_endpoint_returns_valid_bundle():
+def test_convert_endpoint_returns_valid_bundle(client):
     response = client.post(
         "/api/convert",
         json={"strategy": "최근 5일 동안 많이 떨어진 종목을 매수한다."},
@@ -46,56 +45,14 @@ def test_convert_endpoint_returns_valid_bundle():
     assert len(payload["simulationSettings"]) == 12
 
 
-def test_production_convert_requires_valid_gateway_signature():
-    production_app = create_app(
-        AppConfig(
-            environment="production",
-            gateway_shared_secret="test-secret",
-            allowed_emails=frozenset({"member@example.com"}),
-            static_directory=AppConfig.from_environment().static_directory,
-        ),
-        provider_factory=MockSemanticProvider,
-    )
-    production_client = TestClient(production_app)
-    unsigned = production_client.post("/api/convert", json={"strategy": "최근 5일 하락 종목"})
-    assert unsigned.status_code == 401
-
-    body = json.dumps({"strategy": "최근 5일 하락 종목"}, separators=(",", ":")).encode()
-    timestamp = str(int(time.time()))
-    request_id = "00000000-0000-4000-8000-000000000001"
-    prefix = f"{timestamp}\nPOST\n/api/convert\nmember@example.com\n{request_id}\n"
-    signature = hmac.new(b"test-secret", prefix.encode() + body, hashlib.sha256).hexdigest()
-    signed = production_client.post(
-        "/api/convert",
-        content=body,
-        headers={
-            "content-type": "application/json",
-            "x-gateway-timestamp": timestamp,
-            "x-gateway-signature": signature,
-            "x-user-email": "member@example.com",
-            "x-request-id": request_id,
-        },
-    )
-    assert signed.status_code == 200
-    assert production_client.get("/openapi.json").status_code == 404
-    tampered = production_client.post(
-        "/api/convert",
-        content=body,
-        headers={**signed.request.headers, "x-user-email": "intruder@example.com"},
-    )
-    assert tampered.status_code == 401
-
-
-def test_oversized_and_blank_input_are_rejected():
+def test_oversized_and_blank_input_are_rejected(client):
     assert client.post("/api/convert", content=b"x" * 17000).status_code == 413
     assert client.post("/api/convert", json={"strategy": "   "}).status_code == 422
 
 
-def test_get_and_head_cannot_bypass_body_cap_before_gateway_authentication():
+def test_get_and_head_cannot_bypass_body_cap_before_authentication():
     config = AppConfig(
         environment="production",
-        gateway_shared_secret="test-secret",
-        allowed_emails=frozenset(),
         static_directory=AppConfig.from_environment().static_directory,
     )
     calls = []
@@ -104,13 +61,13 @@ def test_get_and_head_cannot_bypass_body_cap_before_gateway_authentication():
         calls.append(True)
         return MockSemanticProvider()
 
-    with TestClient(create_app(config, provider)) as gateway:
+    with TestClient(create_app(config, provider)) as site:
         for method in ("GET", "HEAD"):
-            assert gateway.request(method, "/api/convert", content=b"x" * 17000).status_code == 413
+            assert site.request(method, "/api/convert", content=b"x" * 17000).status_code == 413
     assert calls == []
 
 
-def test_local_unauthenticated_conversion_blocks_external_host_origin_and_remote_peer():
+def test_local_unauthenticated_conversion_blocks_external_host_origin_and_remote_peer(client):
     for headers in (
         {"origin": "https://untrusted.example"},
         {"host": "untrusted.example", "origin": "http://untrusted.example"},
@@ -123,9 +80,34 @@ def test_local_unauthenticated_conversion_blocks_external_host_origin_and_remote
             == 403
         )
     with TestClient(
-        app,
+        client.app,
         base_url="http://127.0.0.1",
         client=("192.0.2.10", 1),
         headers={"origin": "http://127.0.0.1", "x-requested-with": "brain-site"},
     ) as remote:
         assert remote.post("/api/convert", json={"strategy": "최근 5일 하락"}).status_code == 403
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("reasoning_effort", "xhigh"),
+        ("model", "gpt-5.4"),
+        ("max_completion_tokens", 99999),
+    ],
+)
+def test_conversion_rejects_client_model_policy_overrides(client, field, value):
+    assert client.app.state.harness_service is None
+    response = client.post("/api/convert", json={"strategy": "최근 5일 하락", field: value})
+    assert response.status_code == 422
+    assert client.app.state.harness_service is None
+
+
+@pytest.mark.parametrize("mode", ["gateway", "other"])
+def test_obsolete_or_unknown_auth_mode_cannot_disable_membership(mode):
+    with pytest.raises(ValueError, match="AUTH_MODE"):
+        AppConfig(
+            environment="production",
+            auth_mode=mode,
+            static_directory=AppConfig.from_environment().static_directory,
+        )

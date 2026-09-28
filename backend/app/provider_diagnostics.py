@@ -18,8 +18,21 @@ def diagnostic_runtime() -> dict:
     region = os.getenv("VERCEL_REGION", "")
     commit = os.getenv("VERCEL_GIT_COMMIT_SHA", "")
     try:
-        source = Path(__file__).with_name("provider.py").read_bytes()
-        provider_hash = hashlib.sha256(source).hexdigest()
+        digest = hashlib.sha256()
+        # Include every module controlling inference, policy, and model diagnostics.
+        for name in (
+            "provider.py",
+            "chat_provider.py",
+            "openai_provider.py",
+            "openai_policy.py",
+            "response_schema.py",
+            "provider_config.py",
+            "provider_types.py",
+            "provider_errors.py",
+        ):
+            digest.update(name.encode() + b"\0")
+            digest.update(Path(__file__).with_name(name).read_bytes())
+        provider_hash = digest.hexdigest()
     except OSError:
         provider_hash = None
     return {
@@ -28,9 +41,17 @@ def diagnostic_runtime() -> dict:
         "region": region if re.fullmatch(r"[a-z]{3}[0-9]", region) else None,
         "commit": commit if re.fullmatch(r"[0-9a-f]{40}", commit) else None,
         "providerSourceSha256": provider_hash,
-        "proxyConfigured": any(os.getenv(name, "").strip() for name in (
-            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy",
-        )),
+        "proxyConfigured": any(
+            os.getenv(name, "").strip()
+            for name in (
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "ALL_PROXY",
+                "http_proxy",
+                "https_proxy",
+                "all_proxy",
+            )
+        ),
     }
 
 
@@ -39,15 +60,13 @@ def diagnostic_html(result: dict) -> str:
     return (
         '<!doctype html><html lang="ko"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        '<title>AI 연결 진단</title></head><body>'
-        '<main><h1>AI 연결 진단</h1>'
-        '<p>이 조회는 AI 변환을 실행하지 않으며 변환 횟수와 예산을 예약하지 않습니다.</p>'
-        '<p>modelAvailable은 모델 목록에 Contributor가 포함되는지 표시합니다. '
-        '실제 생성 성공을 뜻하지 않습니다.</p>'
-        '<p>recognizedModelIds는 공개된 모델 ID만 표시합니다. '
-        'selectedModel이 있으면 Contributor 개별 모델 조회 결과입니다.</p>'
-        '<p>keyFingerprint는 서버와 로컬에 저장된 키를 비교하는 ID입니다. '
-        '키 원문이나 인증에 사용할 수 있는 값은 제공하지 않습니다.</p>'
-        f'<pre>{report}</pre>'
+        "<title>AI 연결 진단</title></head><body>"
+        "<main><h1>AI 연결 진단</h1>"
+        "<p>이 조회는 AI 변환을 실행하지 않으며 변환 횟수와 예산을 예약하지 않습니다.</p>"
+        "<p>modelAvailable은 선택한 모델에 접근할 수 있는지 표시합니다. "
+        "실제 생성 성공을 뜻하지 않습니다.</p>"
+        "<p>keyFingerprint는 서버와 로컬에 저장된 키를 비교하는 ID입니다. "
+        "키 원문이나 인증에 사용할 수 있는 값은 제공하지 않습니다.</p>"
+        f"<pre>{report}</pre>"
         '<p><a href="/">변환 화면으로 돌아가기</a></p></main></body></html>'
     )

@@ -19,28 +19,11 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade 'pip>=26.2,<27'
       - run: pip install -r requirements-dev.txt
-      - run: ruff check backend
+      - run: ruff check backend scripts/deploy_openai.py
       - run: docker pull postgres:16-alpine
       - run: pytest -q
         env:
           RUN_SQL_TESTS: "1"
-
-  gateway:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: gateway
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: gateway/package-lock.json
-      - run: npm ci
-      - run: npm run check
-      - run: npm test
-      - run: npm run build
 
   frontend:
     runs-on: ubuntu-latest

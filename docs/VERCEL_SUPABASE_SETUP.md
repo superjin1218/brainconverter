@@ -1,10 +1,6 @@
 # Vercel + Supabase 회원 사이트 설정
 
-2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. 승인받은 진단 버전 `a9eb21c`가 Vercel Production에 Ready 상태로 배포됐습니다. 키 변수·키·공급자 코드가 로컬과 같지만 모델 목록은 로컬 8개·서버 4개이며, 서울 서버의 1.3 Contributor 개별 조회도 `404 / model_not_found`입니다. 배포 서버의 변환 문제는 아직 해결되지 않았습니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
-
-미국 함수 지역 비교 변경은 아직 운영에 배포하지 않았습니다. 관리자 상세 조회의
-`?details=true` 사용법과 같은 Contributor 모델의 다른 연결 방안은
-[배포 변환 복구 기록](DEPLOYED_CONVERSION_RECOVERY.md)을 확인하세요.
+현재 코드는 OpenAI GPT-5.4 mini 전용입니다. 키·한 번에 배포하는 명령은 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md)를 따릅니다. 운영 사이트에는 아직 GPT 전환을 배포하지 않았습니다.
 
 ## 1. Supabase DB 적용
 
@@ -12,7 +8,7 @@
 
 SQL Editor에서 [회원·사용량 마이그레이션](../supabase/migrations/202609270001_membership.sql)을 실행합니다. 새 private 테이블·승인 함수·사용량 함수를 만들고 기존 Auth 계정도 승인 대기로 등록합니다. 기존 테이블을 삭제하지 않습니다. 같은 마이그레이션은 다시 실행할 수 있습니다.
 
-이어서 [동시 20건·대기열 업그레이드](../supabase/migrations/202609270002_concurrency_queue.sql), [누적 2만 원 비용 제한](../supabase/migrations/202609270003_ai_budget.sql)을 순서대로 실행합니다. 기존 프로젝트에는 아직 적용하지 않은 마이그레이션만 실행하세요. 초기 설치는 001 → 002 → 003 순서입니다. 003을 다시 실행해도 누적 금액을 초기화하지 않습니다. [회원 검색·페이지 조회 004](../supabase/migrations/202609270004_member_pages.sql)는 전체 회원 검색을 위한 선택 업그레이드이며 현재 운영 DB에는 미적용입니다. 로컬 SQL 검증과 배포 승인을 받은 뒤 적용합니다. 미적용 시 앱은 기존 `brain_members()`로 최근 200명 범위에서 조회·필터·페이지 이동과 승인·이용 중지를 지원합니다. 200명에 도달하면 화면에 조회 범위 제한을 안내합니다. 이전에 열린 화면의 배열 응답도 유지합니다.
+이어서 [동시 20건·대기열 업그레이드](../supabase/migrations/202609270002_concurrency_queue.sql), [누적 2만 원 비용 제한](../supabase/migrations/202609270003_ai_budget.sql)을 순서대로 실행합니다. 기존 프로젝트에는 아직 적용하지 않은 마이그레이션만 실행하세요. 초기 설치는 001 → 002 → 003 → [OpenAI 예산 업그레이드 202609280004](../supabase/migrations/202609280004_openai_budget.sql) 순서입니다. 기존 운영 프로젝트에는 OpenAI 예산 업그레이드까지 적용했고 누적 52원·13건을 보존했습니다. 003을 다시 실행해도 누적 금액을 초기화하지 않습니다. [회원 검색·페이지 조회 004](../supabase/migrations/202609270004_member_pages.sql)는 전체 회원 검색을 위한 선택 업그레이드이며 현재 운영 DB에는 미적용입니다. 회원 조회 확장이 필요할 때 적용합니다. 미적용 시 앱은 기존 `brain_members()`로 최근 200명 범위에서 조회·필터·페이지 이동과 승인·이용 중지를 지원합니다. 200명에 도달하면 화면에 조회 범위 제한을 안내합니다. 이전에 열린 화면의 배열 응답도 유지합니다.
 
 **적용 완료:** 대상 프로젝트 SQL Editor에서 성공을 확인했습니다. [읽기 전용 검증 SQL](../supabase/verify_membership.sql)로 세 테이블의 RLS 활성화·익명/회원 직접 CRUD 금지, 변환 예약·결과 함수의 서버 전용 실행 권한도 확인했습니다. 최초 운영자의 이메일 인증·approved/admin 상태를 확인했습니다. 003 적용 후 한도 20,000원·누적 0원·익명/일반 회원의 예약 금지·서버 전용 예약 권한도 확인했습니다.
 
@@ -53,118 +49,27 @@ Supabase Authentication에서:
 | --- | --- |
 | APP_ENV | production |
 | AUTH_MODE | supabase |
-| HARNESS_PROVIDER | muse |
-| MUSE_API_PROVIDER | meta |
-| MUSE_MODEL | meta/muse-spark-1.3-contributor |
+| HARNESS_PROVIDER | openai |
+| OPENAI_MODEL | gpt-5.4-mini |
 | MAX_CONCURRENT_JOBS | 20 |
 | MODEL_TIMEOUT_SECONDS | 35 |
 | APP_PUBLIC_URL | https://natural-language-brain-alpha-harness.vercel.app |
 | SUPABASE_URL | https://sogpsiheygdwmhdlizvy.supabase.co |
 | SUPABASE_PUBLISHABLE_KEY | 해당 Supabase 프로젝트 공개 키 |
 | SUPABASE_SECRET_KEY | 해당 프로젝트 서버 Secret, 비밀 변수 |
-| META_API_KEY 또는 AI_API_KEY | Meta 직접 발급 키, 비밀 변수 |
+| OPENAI_API_KEY | OpenAI 발급 키, Production Secret |
 
-Chrome에서 `MAX_CONCURRENT_JOBS=20`을 Production·Preview에 저장했습니다. 환경변수는 다음 배포부터 적용됩니다.
-
-Chrome에서 `HARNESS_PROVIDER=muse`, `MUSE_MODEL=meta/muse-spark-1.3-contributor`, timeout 35를 Production·Preview에 저장했습니다. `AUTH_MODE=supabase`와 `APP_PUBLIC_URL`은 Production에 저장했습니다. 미사용 OpenAI 모델 변수는 Muse 변수로 변경했고 OpenAI 키를 등록하지 않았습니다. Preview의 실제 계정 테스트에는 별도 URL·Supabase 설정을 지정하세요. 로컬 설정 창의 키는 Vercel로 자동 이전되지 않습니다. 서버 Secret은 인증·한도 DB 함수에 사용하는 권한이므로 공개 키와 구분하고 브라우저 코드에 넣지 않습니다.
-
-기존 Supabase 서버 키를 `SUPABASE_SECRET_KEY`라는 **Secret 유형·Production 전용** 변수로 저장했고 Vercel 성공 알림을 확인했습니다. 로컬 시험에도 기존 키를 Git에서 제외된 `.env.local`에 저장했습니다. 키를 새로 생성·회전하지 않았습니다.
-
-현재 사용자의 키는 Meta 직접 발급 키입니다. Vercel Production에 `MUSE_API_PROVIDER=meta`와 Secret `META_API_KEY`가 저장돼 있습니다. Secret 원문을 조회하지 않고 SHA-256 비교 ID로 로컬과 서버 키가 같음을 확인했습니다. 양쪽 모델 목록 조회는 200이지만 1.3 Contributor는 로컬에서만 반환됐고 1.2 Contributor는 양쪽에 있습니다. 기존 `AI_API_KEY`는 별칭으로 지원하며 명시적인 Meta 키를 우선합니다. Meta 모드는 `META_API_KEY` → `AI_API_KEY`만 읽고 `https://api.meta.ai/v1/chat/completions`에 고정 연결합니다. 모델 식별자는 같은 Contributor 모델의 Meta 표기인 `muse-spark-1.3-contributor`로 전송합니다. [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions).
-
-Vercel AI Gateway를 따로 선택하려면 `MUSE_API_PROVIDER=gateway`와 Vercel 발급 키를 설정합니다. 이 모드의 키 우선순위는 `AI_GATEWAY_API_KEY` → `AI_API_KEY` → `VERCEL_OIDC_TOKEN`입니다. OIDC는 Meta 직접 인증에 사용할 수 없습니다. [Vercel OIDC 안내](https://vercel.com/docs/ai-gateway/authentication-and-byok/oidc).
-
-두 연결 방식 모두 Contributor 모델만 허용하며 모델·제공자 자동 전환이 없습니다. Contributor 학습 활용 조건에 동의한 변환만 호출합니다. Gateway를 선택한 경우에도 제공자는 Meta만 허용합니다. [Gateway Chat Completions](https://vercel.com/docs/ai-gateway/sdks-and-apis/openai-chat-completions).
+새 환경변수와 코드는 배포 시점부터 적용됩니다. OpenAI 키와 Supabase 서버 Secret은 브라우저 코드에 넣지 않습니다. 실제 AI 호출은 OpenAI만 지원합니다.
 
 ## 5. 배포 및 확인
 
-### 재배포 전 빌드 준비 (2026-09-28)
+`make preflight-openai`는 유료 생성 없이 키·선택 모델·예산 마이그레이션을 조회합니다. Vercel CLI 로그인과 운영 DB 업그레이드가 준비되면 `make deploy-openai`가 검사·운영 변수 등록·배포·모델/소스 해시 확인을 수행합니다. [구체적인 명령](OPENAI_DEPLOYMENT.md)을 따릅니다.
 
-첫 배포 시 `uv lock`이 `No project table found`로 실패했습니다. `pyproject.toml`에 프로젝트 메타데이터와 `requirements.txt`와 동일한 런타임 의존성 4개를 추가하고 `uv.lock`을 생성했습니다. 로컬 Python 3.12의 별도 환경에서 `uv lock`과 `uv sync --locked --no-dev`, `app.py` 로딩을 확인했습니다. 정적 파일 존재와 운영 API 문서 비공개도 확인했으며 이 로컬 빌드 확인에서는 실제 AI 제공자를 초기화하지 않았습니다. 2026-09-28 Chrome에서 Vercel Production `c5f45cd`의 Ready 상태를 확인했습니다.
-
-Vercel의 Ignored Build Step은 `Automatic`으로 저장했으며, 저장소의 `git.deploymentEnabled=false`는 유지합니다. GitHub 수정 반영만으로 재배포하지 않습니다. 재배포 시 기존 실패 배포의 **Redeploy** 대신 **Deployments → Deployments actions → Create Deployment → main**에서 새 수정 커밋을 확인하고 **Deploy to Production**을 선택하세요. SQL 004는 운영 DB에 적용하지 않았습니다.
-
-초기에는 **Ignored Build Step: Don’t build anything (`exit 0`)**으로 배포를 중지했습니다. 승인된 수동 배포를 위해 현재는 `Automatic`으로 변경했습니다. 저장소의 `vercel.json`에는 `git.deploymentEnabled=false`를 유지하여 모든 브랜치의 Git 자동 배포를 차단합니다. GitHub 코드 저장과 수동 웹사이트 배포는 별개입니다. [Vercel Git 배포 설정](https://vercel.com/docs/project-configuration/git-configuration#turning-off-all-automatic-deployments).
-
-환경변수·DB와 검증 결과를 확인한 후 **재배포 직전에 운영자 승인을 받습니다.** 진단 버전 `896e2be`는 2026-09-28 운영자 승인 후 배포됐으며 Production Current와 기본 도메인 적용을 확인했습니다. 향후 자동 배포를 원할 때 `git.deploymentEnabled`를 `true`로 변경하며, 수동 배포 승인과 향후 자동 배포 허용은 별개입니다. 회원 계정 발급→운영자 승인→로그인→단순 전략 한 번 변환→이용 중지 차단을 확인합니다. 실제 유료 AI 변환은 사용자가 별도로 승인한 경우에만 실행합니다. BRAIN Simulate는 사용자가 별도로 실행합니다.
-
-## 배포 후 Meta 404 진단 (2026-09-28)
-
-Chrome에서 Production `c5f45cd`의 Ready 상태와 실제 `/api/convert` 요청 2건의
-Meta `POST /v1/chat/completions` 404를 확인했습니다. Supabase 인증·승인·한도 조회는
-정상이며, 연결 방식은 `meta`, 고정 모델은 `meta/muse-spark-1.3-contributor`입니다.
-같은 날 로컬에 저장된 키의 `GET /v1/models`는 200으로 Contributor 모델을 반환했습니다.
-이 모델 목록 조회는 전략이나 프롬프트를 보내지 않으며 AI 생성을 하지 않습니다.
-당시에는 서버 키 일치 여부와 서버 모델 접근 여부가 미확정이었으며, 아래 후속 진단으로 키 일치와 서버 목록의 Contributor 누락을 확인했습니다.
-
-진단 코드를 배포한 뒤 운영자로 로그인한 Chrome에서
-`/api/admin/provider-check`를 열어 **배포 서버의** Meta 모델 목록을 확인할 수 있습니다.
-이 경로는 승인된 관리자만 접근할 수 있고, 키·원문 오류·다른 모델 목록을 반환하지 않습니다.
-변환 횟수·예산을 예약하지 않으며 자동 재시도나 실제 AI 생성도 하지 않습니다.
-`httpStatus=200`과 `modelAvailable=true`면 해당 서버 키의 모델 목록에 Contributor가 포함됨을 확인합니다. 실제 생성 성공은 별도 검증이 필요합니다.
-실제 변환 로그에는 HTTP 상태·허용 목록에 포함된 공급자 오류 코드·응답 종류만 남깁니다.
-일반 404와 명시적 `model_not_found`를 구분하며 비밀키·전략·원문 오류는 기록하지 않습니다.
-
-2026-09-28 09:30 KST 운영자 세션의 진단 요청이 배포 서버까지 도달했고, Vercel 로그에서 Meta `GET /v1/models` 200과 진단 경로 200을 확인했습니다. Chrome은 응답 화면을 `ERR_BLOCKED_BY_CLIENT`로 표시해 `modelAvailable` 값은 읽지 못했습니다. 따라서 키의 모델 목록 조회 인증·네트워크 연결은 확인했지만 Contributor 생성 권한이나 실제 생성 성공은 아직 확인한 것이 아닙니다. 미인증 별도 GET은 401로 차단됐습니다.
-
-진단 버전 `896e2be`는 로컬 Python 테스트 297개 통과·SQL 관련 30개 건너뜀, 린트 통과를 확인했습니다. 해당 GitHub CI는 backend(PostgreSQL 포함)·frontend·gateway 모두 통과했습니다. 이번 변경은 DB 마이그레이션을 요구하지 않습니다. 진단 코드 배포와 승인받은 실제 AI 1회 검증은 완료했으며 실패 원인과 다음 비교는 아래에 기록합니다.
-
-### 승인받은 실제 변환 1회 결과와 다음 비교
-
-2026-09-28 09:34:59 KST 운영자 승인 후 단순 당일 수익률 역순위 전략으로
-실제 변환을 **1회만** 실행했습니다. 요청 ID는 `ccxwp-1790555699362-6bc5524baa8d`이며,
-배포 `dpl_AYRrKht34VAoGC5YUdmQ8BLpuqyw`의 로그에서 Supabase 인증·승인·변환 예약·
-예산 예약·결과 저장은 200, Meta 생성 요청은 404를 확인했습니다.
-안전한 오류 로그는
-`code=model_access http_status=404 upstream_code=model_not_found response_shape=json_error`
-입니다. 자동 재시도나 다른 모델 호출은 없었습니다.
-
-모델 ID `muse-spark-1.3-contributor`는 공식 문서와 일치합니다.
-Meta는 이 오류를 모델 ID 또는 팀의 모델 접근 문제로 안내하지만, 이 로그만으로
-키 불일치나 지역 제한을 단정할 수 없습니다. [Meta 오류 안내](https://dev.meta.ai/docs/error-handling).
-
-후속 진단 변경은 Chrome의 JSON 화면 차단 때문에 응답을 읽지 못한 문제를 줄이기 위해
-같은 `/api/admin/provider-check`에 HTML 표시를 추가합니다. 브라우저에서 열면 HTML,
-API 클라이언트에서는 JSON을 반환하며 관리자 승인 확인·캐시 금지·CSP·프레임 차단은 유지합니다.
-`keyFingerprint`는 저장된 API 키 SHA-256의 앞 16자리로, 로컬과 서버가 같은 키를 쓰는지
-비교하기 위한 값입니다. 키 원문은 반환하거나 로그에 남기지 않습니다.
-모델 목록 조회만 수행하므로 실제 AI 생성·변환 횟수·예산 예약이 없습니다.
-새 변경은 테스트 299개 통과·SQL 관련 30개 건너뜀·린트 통과했으며,
-GitHub CI의 backend(PostgreSQL 포함)·frontend·gateway도 모두 통과했습니다.
-2026-09-28 09:46 KST 운영자 재배포 승인 후 `2ed26fa`를 Production에 배포했습니다.
-배포 ID는 `dpl_5txMpR7RhucAqMCyuN28RxVwHuWt`이며 Ready와 기본 도메인 적용을 확인했습니다.
-관리자 HTML 진단 화면에서 다음 값을 읽었습니다.
-
-```json
-{
-  "apiProvider": "meta",
-  "model": "muse-spark-1.3-contributor",
-  "inferencePerformed": false,
-  "status": "failed",
-  "httpStatus": 200,
-  "modelAvailable": false,
-  "errorCode": "model_access",
-  "keyFingerprint": "aa0ecc064a45a9ec"
-}
-```
-
-직후 로컬에서 같은 키로 `GET /v1/models`를 다시 조회한 결과 200이며
-`muse-spark-1.3-contributor`가 포함됐습니다. 키 비교 ID도 동일하고 로컬 HTTP 프록시는
-설정되지 않았습니다. 이번 후속 진단은 서버 1회·로컬 1회 모델 목록 조회만 했고
-실제 AI 생성은 추가로 실행하지 않았습니다. Chrome에서 진단 결과가 보이지 않던 문제는
-해결됐으나 변환 실패는 아직 남아 있습니다.
-
-동일한 키·모델 주소에서 요청 환경에 따라 Meta의 모델 목록이 달라지는 현상까지
-확인했습니다. Meta의 지역/IP 판정 또는 카탈로그 라우팅 차이는 가능성이며 원인으로
-확정하지 않았습니다. 지역 설정·키·모델·제공자를 임의 변경하지 않았습니다.
-Meta 상태 화면은 `Status information is unavailable`을 표시했으므로 전체 서비스 장애도
-확정하지 않았습니다. [지원 문의 초안](META_SERVER_MODEL_ACCESS_REPORT.md)은 문서로만
-준비했으며 Meta에 전송하지 않았습니다.
-추가 실제 AI 요청은 새로운 승인 없이 실행하지 않습니다.
+`git.deploymentEnabled=false`를 유지해 Git 푸시만으로 자동 배포하지 않습니다. 배포 후 승인된 운영자의 `/api/admin/provider-check`는 선택한 OpenAI 모델의 메타데이터만 읽습니다. 유료 변환과 BRAIN Simulate는 이 확인에 포함되지 않습니다. 이전 Meta 배포 실패 증거는 [조사 기록](DEPLOYED_CONVERSION_RECOVERY.md)에 보존했습니다.
 
 ## 월 비용과 상시 운영
 
-[모델 검증 범위·월 1,000회 비용 계산](MODEL_COST_AND_VALIDATION.md)을 참고하세요. AI 토큰 사용료와 호스팅·메일·도메인 비용은 별개입니다. Supabase Free는 1주간 활동이 없으면 일시 정지하므로 세션을 쉬는 기간에는 재개가 필요할 수 있습니다. 중단 없이 유지하려면 Pro(기본 $25/월) 등 운영 조건을 검토하세요. 유료 업그레이드는 하지 않았습니다. [Supabase 요금](https://supabase.com/pricing).
+[현재 모델 비용 정책](OPENAI_DEPLOYMENT.md#비용-정책)을 참고하세요. AI 토큰 사용료와 호스팅·메일·도메인 비용은 별개입니다. Supabase Free는 1주간 활동이 없으면 일시 정지하므로 세션을 쉬는 기간에는 재개가 필요할 수 있습니다. 중단 없이 유지하려면 Pro(기본 $25/월) 등 운영 조건을 검토하세요. 유료 업그레이드는 하지 않았습니다. [Supabase 요금](https://supabase.com/pricing).
 
 ## 사용 제한과 보관
 
@@ -172,7 +77,7 @@ Meta 상태 화면은 `Status information is unavailable`을 표시했으므로 
 
 대기 최대 10분이며 화면을 닫거나 연결이 끊겨 2분간 확인하지 않은 대기 요청은 만료됩니다. 화면을 닫은 뒤에도 자동 처리하는 기능은 없습니다. 대기열 입장 때 사용량을 한 번 예약하므로 취소·만료된 대기도 회원/사이트 요청 한도에 포함하지만 AI 비용은 발생하지 않습니다. 월·일·분당 한도 초과는 대기열로 넘기지 않고 거절합니다.
 
-추가로 실제 Muse 시도 전에 4원씩 누적 예약하고 20,000원에서 새 유료 호출을 차단합니다. DB 오류에도 호출하지 않으며 월 변경·회원 삭제로 금액을 초기화하지 않습니다. 운영자 설정에서 확인합니다. 실제 청구서·다른 앱 비용을 제한하는 기능은 아니며 [예산 계산과 범위](AI_BUDGET.md)를 확인하세요.
+추가로 실제 GPT 시도 전에 34원씩 누적 예약하고 20,000원에서 새 유료 호출을 차단합니다. DB 오류에도 호출하지 않으며 월 변경·회원 삭제로 금액을 초기화하지 않습니다. 운영자 설정에서 확인합니다. 실제 청구서·다른 앱 비용을 제한하는 기능은 아니며 [예산 계산과 범위](AI_BUDGET.md)를 확인하세요.
 
 한국 시간 기준 일·월 경계를 사용합니다. 실패한 시도도 예약 횟수에 포함합니다. 변경하려면 마이그레이션 함수 및 사용량 표시의 상수를 함께 수정합니다.
 

@@ -42,14 +42,14 @@
       </div>
       <section id="local-provider-panel" class="provider-panel" aria-labelledby="provider-title" hidden>
           <div class="provider-heading">
-            <h3 id="provider-title">Vercel AI Gateway 키 연결</h3>
+            <h3 id="provider-title">AI 연결</h3>
             <span id="provider-mode" class="provider-mode">연결 확인 중</span>
           </div>
           <p id="provider-description"></p>
           <form id="provider-form" autocomplete="off">
-            <label for="openai-api-key">Vercel AI Gateway API 키</label>
+            <label for="provider-api-key">설정한 AI 서비스의 API 키</label>
             <div class="provider-input-row">
-              <input id="openai-api-key" type="password" placeholder="AI Gateway에서 발급한 키" required
+              <input id="provider-api-key" type="password" placeholder="서버에 설정한 서비스에서 발급한 키" required
                 minlength="16" maxlength="1024" autocomplete="new-password" spellcheck="false"
                 aria-describedby="provider-key-note" />
               <button id="connect-provider" class="connect-button" type="submit">키 연결</button>
@@ -178,10 +178,6 @@
               <span>전략 변환하기</span><span aria-hidden="true">→</span>
             </button>
           </div>
-          <label id="training-notice" class="training-notice">
-            <input id="training-consent" type="checkbox" />
-            <span>Muse Spark Contributor는 입력 전략과 응답을 Meta의 모델 학습에 사용합니다. 이 조건을 확인하고 변환에 동의합니다.</span>
-          </label>
           <button id="refresh-usage" class="copy-button" type="button" hidden>남은 횟수 확인</button>
         </form>
 
@@ -193,11 +189,7 @@
           <b>현재 지원: 가격 변화·수익률 순위·평균 거래량 조건</b>
           <span>복합 신호, 재무지표, 손절·익절은 아직 지원하지 않습니다. 회원 서비스에서는 같은 요청을 24시간 동안 재사용합니다.</span>
         </aside>
-        <details id="admin-panel" class="settings-panel" hidden>
-          <summary>운영진 사용 현황</summary>
-          <button id="refresh-admin" class="copy-button" type="button">새로고침</button>
-          <pre id="admin-usage"></pre>
-        </details>
+
       </section>
 
       <section class="result" aria-labelledby="result-title" aria-live="polite">

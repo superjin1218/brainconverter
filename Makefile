@@ -1,4 +1,4 @@
-.PHONY: install dev dev-ai dev-mock test test-sql test-frontend lint docker-build
+.PHONY: install dev dev-ai dev-mock test test-sql test-frontend lint docker-build preflight-openai deploy-openai
 
 install:
 	python3 -m venv .venv
@@ -12,7 +12,7 @@ dev-mock:
 	APP_ENV=development AUTH_MODE=none HARNESS_PROVIDER=mock .venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app --host 127.0.0.1 --port 8080
 
 dev-ai:
-	APP_ENV=development AUTH_MODE=supabase HARNESS_PROVIDER=muse APP_PUBLIC_URL=http://127.0.0.1:8080 .venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app --host 127.0.0.1 --port 8080 --env-file .env.local
+	APP_ENV=development AUTH_MODE=supabase HARNESS_PROVIDER=openai APP_PUBLIC_URL=http://127.0.0.1:8080 .venv/bin/uvicorn backend.app.main:app --reload --reload-dir backend/app --host 127.0.0.1 --port 8080 --env-file .env.local
 
 test:
 	.venv/bin/pytest -q
@@ -24,7 +24,14 @@ test-frontend:
 	node --test backend/tests/frontend_state.test.mjs
 
 lint:
-	.venv/bin/ruff check backend
+	.venv/bin/ruff check backend scripts/deploy_openai.py
 
 docker-build:
 	docker build -t brain-alpha-harness:local .
+
+# Preflight is read-only; deploy syncs Vercel Production and publishes this checkout.
+preflight-openai:
+	.venv/bin/python scripts/deploy_openai.py --check
+
+deploy-openai:
+	.venv/bin/python scripts/deploy_openai.py

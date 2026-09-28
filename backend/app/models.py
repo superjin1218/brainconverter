@@ -68,7 +68,6 @@ class SettingsOverrides(StrictModel):
 class ConvertRequest(StrictModel):
     strategy: str = Field(min_length=3, max_length=2000)
     settings: SettingsOverrides | None = None
-    trainingConsent: bool = False
 
     @field_validator("strategy")
     @classmethod

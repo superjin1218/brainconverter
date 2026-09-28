@@ -119,6 +119,8 @@ def db():
 
 @pytest.fixture(autouse=True)
 def members(db):
+    # Some compatibility tests deliberately reinstall an older function version.
+    db.run((ROOT / "supabase/migrations/202609280005_gpt_usage_reset.sql").read_text())
     db.run(f"""
       truncate private.brain_ai_charges;
       update private.brain_ai_budget set accounted_krw=0;
@@ -351,11 +353,11 @@ def test_budget_requires_approved_owned_live_job_and_matching_input(db):
     assert db.run("select accounted_krw from private.brain_ai_budget;") == "0"
     assert budget_reserve(db, MEMBER, request)["state"] == "reserved"
     assert budget_reserve(db, MEMBER, request)["state"] == "already_charged"
-    assert db.run("select accounted_krw from private.brain_ai_budget;") == "4"
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "34"
 
 
 def test_parallel_budget_reservations_cannot_exceed_20000_even_with_20_slots(db):
-    db.run("update private.brain_ai_budget set accounted_krw=19996;")
+    db.run("update private.brain_ai_budget set accounted_krw=19966;")
     users = [str(uuid4()) for _ in range(20)]
     requests = [str(uuid4()) for _ in users]
     for user, request in zip(users, requests):
@@ -381,7 +383,8 @@ def test_budget_replay_has_one_winner_and_survives_job_cleanup_and_migration_rer
     db.rpc("brain_finish", f"'{MEMBER}','{request}',null,true", role="service_role")
     db.run(f"delete from auth.users where id='{MEMBER}';")
     db.run((ROOT / "supabase/migrations/202609270003_ai_budget.sql").read_text())
-    assert db.run("select accounted_krw from private.brain_ai_budget;") == "4"
+    db.run((ROOT / "supabase/migrations/202609280004_openai_budget.sql").read_text())
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "34"
     assert db.run("select count(*) from private.brain_ai_charges;") == "1"
 
 
@@ -405,6 +408,7 @@ def test_missing_budget_row_fails_closed(db):
     db.run("delete from private.brain_ai_budget;")
     assert budget_reserve(db, MEMBER, request)["state"] == "unavailable"
     db.run((ROOT / "supabase/migrations/202609270003_ai_budget.sql").read_text())
+    db.run((ROOT / "supabase/migrations/202609280004_openai_budget.sql").read_text())
 
 
 def test_admin_pages_reach_older_members_despite_registration_flood(db):
@@ -451,3 +455,133 @@ def test_anonymous_cannot_execute_member_pages(db):
     assert "permission denied" in db.run(
         "select public.brain_members_page();", role="anon", fails=True
     )
+
+
+def test_openai_budget_reserves_34_and_rerun_preserves_history(db):
+    db.run(f"insert into private.brain_ai_charges(request_id,allowance_krw) "
+           f"values('{uuid4()}',4);")
+    db.run("update private.brain_ai_budget set accounted_krw=4;")
+    approve(db)
+    request = str(uuid4())
+    db.reserve(request=request)
+    args = f"'{MEMBER}','{request}','{HASH}',34"
+    assert db.rpc("brain_budget_reserve", args, role="service_role")["state"] == "reserved"
+    assert db.rpc("brain_budget_reserve", args, role="service_role")["state"] == "already_charged"
+    db.run((ROOT / "supabase/migrations/202609280004_openai_budget.sql").read_text())
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "38"
+    assert db.run("select sum(allowance_krw) from private.brain_ai_charges;") == "38"
+    assert db.run("select count(*) from private.brain_ai_charges;") == "2"
+    assert db.rpc("brain_budget_status", "34", role="authenticated", user=ADMIN)[
+        "allowancePerAttemptKrw"
+    ] == 34
+
+
+def test_openai_parallel_admission_cannot_overspend_remaining_34(db):
+    db.run("update private.brain_ai_budget set accounted_krw=19966;")
+    users = [str(uuid4()) for _ in range(6)]
+    requests = [str(uuid4()) for _ in users]
+    for user, request in zip(users, requests):
+        db.run(f"insert into auth.users(id,email_confirmed_at) values('{user}',now());")
+        approve(db, user)
+        db.reserve(user=user, request=request)
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(
+            lambda pair: db.rpc(
+                "brain_budget_reserve", f"'{pair[0]}','{pair[1]}','{HASH}',34", role="service_role"
+            ), zip(users, requests),
+        ))
+    assert sum(r["state"] == "reserved" for r in results) == 1
+    assert sum(r["state"] == "budget_exhausted" for r in results) == 5
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "20000"
+    assert db.rpc("brain_budget_status", "34", role="authenticated", user=ADMIN)["stopped"]
+
+
+def test_openai_budget_rejects_unknown_allowance_and_public_readiness(db):
+    approve(db)
+    request = str(uuid4())
+    db.reserve(request=request)
+    for allowance in (0, -1, 1, 4, 20000):
+        assert db.rpc(
+            "brain_budget_reserve", f"'{MEMBER}','{request}','{HASH}',{allowance}",
+            role="service_role",
+        )["state"] == "denied"
+    for role in ("anon", "authenticated"):
+        assert "permission denied" in db.run(
+            "select public.brain_openai_budget_ready();", role=role, user=MEMBER, fails=True,
+        )
+    assert db.rpc("brain_openai_budget_ready", role="service_role")["ready"] is True
+    assert db.run("select accounted_krw from private.brain_ai_budget;") == "0"
+
+
+def test_gpt_reset_archives_history_once_and_resets_only_admin_quota(db):
+    approve(db)
+    admin_request, member_request = str(uuid4()), str(uuid4())
+    db.run(f"""
+      truncate private.brain_accounting_reset;
+      insert into private.brain_jobs(request_id,user_id,request_hash,status) values
+        ('{admin_request}','{ADMIN}','{HASH}','done'),
+        ('{member_request}','{MEMBER}','{HASH}','done');
+      insert into private.brain_ai_charges(request_id,allowance_krw) values
+        ('{admin_request}',4),('{member_request}',34);
+      update private.brain_ai_budget set accounted_krw=38;
+    """)
+    migration = (ROOT / "supabase/migrations/202609280005_gpt_usage_reset.sql").read_text()
+    db.run(migration)
+    status = db.rpc("brain_budget_status", role="authenticated", user=ADMIN)
+    assert status["accountedKrw"] == status["attempts"] == status["estimatedCostMicrousd"] == 0
+    assert db.run("select archived_accounted_krw from private.brain_accounting_reset;") == "38"
+    assert db.run("select count(*) from private.brain_ai_charges;") == "2"
+    assert db.run("select count(*) from private.brain_jobs;") == "2"
+    assert db.rpc("brain_usage", role="authenticated", user=ADMIN)["monthlyRemaining"] == 50
+    assert db.rpc("brain_usage", role="authenticated", user=ADMIN)["dailyUsed"] == 0
+    assert db.rpc("brain_usage", role="authenticated", user=MEMBER)["monthlyRemaining"] == 49
+    # Consumed admin quota before the reset must not block a new admission.
+    db.run(f"""insert into private.brain_jobs(request_id,user_id,request_hash,status,started_at)
+      select md5(i::text)::uuid,'{ADMIN}','{HASH}','done',
+        (select started_at-interval '2 minutes' from private.brain_accounting_reset)
+      from generate_series(1,50) i;""")
+    request = str(uuid4())
+    assert db.reserve(user=ADMIN, request=request)["state"] == "reserved"
+    assert budget_reserve(db, ADMIN, request)["state"] == "reserved"
+    db.run(migration)
+    status = db.rpc("brain_budget_status", role="authenticated", user=ADMIN)
+    assert status["since"] is not None
+    assert status["accountedKrw"] == 34 and status["attempts"] == 1
+    assert db.rpc("brain_usage", role="authenticated", user=ADMIN)["monthlyRemaining"] == 49
+
+
+def test_gpt_cost_survives_result_cleanup_and_duplicate_finish(db):
+    approve(db)
+    request = str(uuid4())
+    db.reserve(request=request)
+    budget_reserve(db, MEMBER, request)
+    result = json.dumps({"provider": "openai", "usage": {
+        "inputTokens": 828, "outputTokens": 74, "costMicrousd": 954,
+    }})
+    args = f"'{MEMBER}','{request}','{result}',false"
+    assert db.rpc("brain_finish", args, role="service_role")["saved"]
+    assert not db.rpc("brain_finish", args, role="service_role")["saved"]
+    db.run("delete from private.brain_jobs;")
+    status = db.rpc("brain_budget_status", role="authenticated", user=ADMIN)
+    assert status["estimatedCostMicrousd"] == 954
+    assert status["inputTokens"] == 828 and status["outputTokens"] == 74
+    assert status["accountedKrw"] == 34  # Estimate never refunds the safety reserve.
+    assert status["attempts"] == status["usageRecordedAttempts"] == 1
+    assert status["unconfirmedAttempts"] == 0
+
+
+@pytest.mark.parametrize("failed", [True, False])
+def test_failed_or_missing_gpt_usage_is_unknown_not_free(db, failed):
+    approve(db)
+    request = str(uuid4())
+    db.reserve(request=request)
+    budget_reserve(db, MEMBER, request)
+    result = json.dumps({"provider": "openai", "usage": {
+        "inputTokens": 0, "outputTokens": 0, "costMicrousd": 17000,
+    }})
+    db.rpc("brain_finish", f"'{MEMBER}','{request}','{result}',{str(failed).lower()}",
+           role="service_role")
+    status = db.rpc("brain_budget_status", role="authenticated", user=ADMIN)
+    assert status["unconfirmedAttempts"] == 1
+    assert status["usageRecordedAttempts"] == status["estimatedCostMicrousd"] == 0
+    assert status["accountedKrw"] == 34

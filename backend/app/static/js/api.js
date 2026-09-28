@@ -6,17 +6,19 @@ export class HarnessApi {
     this.authQueue = Promise.resolve();
   }
 
-  clearSession() { this.generation += 1; this.pending = null; }
+  clearPending() { this.pending = null; }
+
+  clearSession() { this.generation += 1; this.clearPending(); }
 
   assertSession(generation) {
     this.onSessionCheck?.();
     if (generation !== this.generation) throw new Error("로그인 상태가 변경됐습니다. 다시 시도하세요.");
   }
 
-  async convert(strategy, settings = null, expectedProvider = null, trainingConsent = false, onProgress = () => {}) {
+  async convert(strategy, settings = null, expectedProvider = null, onProgress = () => {}) {
     const generation = this.generation;
     this.assertSession(generation);
-    const body = JSON.stringify({strategy, settings, trainingConsent});
+    const body = JSON.stringify({strategy, settings});
     if (this.pending?.body !== body) this.pending = {body, id: crypto.randomUUID()};
     const requestId = this.pending.id;
     const options = {
@@ -84,8 +86,8 @@ export class HarnessApi {
     }
   }
 
-  async usage(admin = false) {
-    const response = await fetch(admin ? "/api/admin/usage" : "/api/usage");
+  async usage() {
+    const response = await this.request("/api/usage", {signal: AbortSignal.timeout(12000)});
     if (!response.ok) return null;
     return response.json();
   }

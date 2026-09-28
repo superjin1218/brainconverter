@@ -10,7 +10,7 @@ export class LocalProviderPanel {
     this.dialog = document.querySelector("#provider-dialog");
     this.settingsButton = document.querySelector("#open-settings");
     this.form = document.querySelector("#provider-form");
-    this.input = document.querySelector("#openai-api-key");
+    this.input = document.querySelector("#provider-api-key");
     this.feedback = document.querySelector("#provider-feedback");
     this.connectButton = document.querySelector("#connect-provider");
     this.disconnectButton = document.querySelector("#disconnect-provider");
@@ -74,15 +74,15 @@ export class LocalProviderPanel {
   }
 
   async prepareConversion() {
-    const wasConnected = this.state?.provider === "muse" && this.state.keyConfigured;
+    const wasConnected = (this.state?.provider === "openai") && this.state.keyConfigured;
     const state = await this.refresh();
     if (!state) throw new Error("AI 연결 상태를 확인하지 못했습니다. 새로고침해 주세요.");
-    const connected = state.provider === "muse" && state.keyConfigured;
+    const connected = (state.provider === "openai") && state.keyConfigured;
     if (wasConnected && !connected) {
-      this.api.pending = null;
+      this.api.clearPending();
       throw new Error("서버 재시작 또는 연결 해제로 API 키가 해제됐습니다. 운영자에게 연결 상태를 확인해 주세요. 실제 AI 변환은 실행하지 않았습니다.");
     }
-    if (state.provider === "muse" && !connected) {
+    if ((state.provider === "openai") && !connected) {
       throw new Error("서버에 AI 키가 설정되지 않았습니다. 운영자에게 문의하세요.");
     }
     return state.provider;
@@ -93,7 +93,7 @@ export class LocalProviderPanel {
     this.panel.hidden = !this.settingsAllowed;
     this.settingsButton.hidden = !this.settingsAllowed;
     document.querySelector("#provider-chip").hidden = !this.accessAllowed;
-    const connected = state.provider === "muse" && state.keyConfigured;
+    const connected = (state.provider === "openai") && state.keyConfigured;
     const mock = state.provider === "mock";
     this.panel.classList.toggle("connected", connected);
     const local = state.localKeyEntry === true;
@@ -112,8 +112,12 @@ export class LocalProviderPanel {
     this.form.hidden = !canEdit || connected;
     this.disconnectButton.hidden = !canEdit || !connected;
     document.querySelector("#provider-key-note").hidden = !canEdit;
-    document.querySelector("#training-notice").hidden = mock;
-    document.querySelector("#training-consent").required = !mock;
+  }
+
+  clearFeedback() {
+    this.input.value = "";
+    this.feedback.textContent = "";
+    this.feedback.classList.remove("failed");
   }
 
   setBusy(busy) {
@@ -146,7 +150,7 @@ export class LocalProviderPanel {
       this.input.value = "";
       const state = await pending;
       if (generation !== this.api.generation) return;
-      this.api.pending = null;
+      this.api.clearPending();
       this.render({...state, localKeyEntry: true});
       this.feedback.textContent = disconnect ? "입력한 키를 해제했습니다. 현재 모의 모드입니다." : "키를 설정했습니다. 설정을 닫고 전략을 변환해 보세요.";
       this.onChange();

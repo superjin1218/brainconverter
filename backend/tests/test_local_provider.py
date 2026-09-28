@@ -8,12 +8,14 @@ from fastapi.testclient import TestClient
 from backend.app import local_provider
 from backend.app.config import AppConfig
 from backend.app.main import create_app
-from backend.app.provider import MockSemanticProvider, MuseSparkProvider
+from backend.app.mock_provider import MockSemanticProvider
+from backend.app.openai_provider import OpenAIProvider
 from backend.app.provider_errors import MESSAGES
-from backend.tests.test_provider import reply
+from backend.tests.provider_fixtures import reply
 
 ORIGIN = "http://127.0.0.1:8080"
 HEADERS = {"origin": ORIGIN, "x-local-setup": "1"}
+CONVERSION_HEADERS = {"origin": ORIGIN, "x-requested-with": "brain-site"}
 PATH = "/api/local/provider"
 FAKE_KEY = "sk-local-test-placeholder-never-a-real-key"
 
@@ -22,8 +24,7 @@ def make_app(environment="development"):
     return create_app(
         AppConfig(
             environment=environment,
-            gateway_shared_secret="test-secret",
-            allowed_emails=frozenset(),
+            auth_mode="none" if environment == "development" else "supabase",
             static_directory=AppConfig.from_environment().static_directory,
         ),
         provider_factory=MockSemanticProvider,
@@ -33,7 +34,7 @@ def make_app(environment="development"):
 @pytest.fixture
 def local_client(monkeypatch):
     monkeypatch.setenv("HARNESS_PROVIDER", "mock")
-    monkeypatch.setenv("MUSE_MODEL", "meta/muse-spark-1.3-contributor")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-5.4-mini")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     with TestClient(make_app(), base_url=ORIGIN, client=("127.0.0.1", 50000)) as client:
         yield client
@@ -44,43 +45,57 @@ def test_key_switches_actual_provider_and_disconnects_without_persisting(local_c
 
     def handler(request):
         assert request.headers["authorization"] == f"Bearer {FAKE_KEY}"
-        assert json.loads(request.content)["model"] == "meta/muse-spark-1.3-contributor"
+        body = json.loads(request.content)
+        assert body["model"] == "gpt-5.4-mini"
+        assert body["reasoning_effort"] == "none"
+        assert body["max_completion_tokens"] == 1024
         calls.append(request.url.path)
         return httpx.Response(200, json=reply())
 
     monkeypatch.setattr(
         local_provider,
-        "MuseSparkProvider",
-        lambda *, api_key: MuseSparkProvider(httpx.MockTransport(handler), api_key=api_key),
+        "OpenAIProvider",
+        lambda *, api_key: OpenAIProvider(httpx.MockTransport(handler), api_key=api_key),
     )
     assert local_client.get(PATH).json()["provider"] == "mock"
     # A client-supplied expensive model cannot override the server's budget profile.
     response = local_client.post(
-        PATH, json={"apiKey": FAKE_KEY, "model": "gpt-5-pro"}, headers=HEADERS
+        PATH,
+        json={
+            "apiKey": FAKE_KEY,
+            "model": "gpt-5-pro",
+            "reasoning_effort": "xhigh",
+            "max_completion_tokens": 99999,
+        },
+        headers=HEADERS,
     )
     assert response.status_code == 200
     assert response.json() == {
-        "provider": "muse",
+        "provider": "openai",
         "keyConfigured": True,
-        "model": "meta/muse-spark-1.3-contributor",
+        "model": "gpt-5.4-mini",
     }
     assert FAKE_KEY not in response.text
     assert FAKE_KEY not in local_client.get(PATH).text
     assert "no-store" in response.headers["cache-control"]
-    assert not calls  # Setting the key does not claim successful OpenAI authentication.
+    assert not calls  # Setting the key does not claim successful provider authentication.
     assert not os.getenv("OPENAI_API_KEY")
 
     response = local_client.post(
-        "/api/convert", json={"strategy": "최근 5일 하락 종목 매수", "trainingConsent": True}
+        "/api/convert",
+        json={"strategy": "최근 5일 하락 종목 매수"},
+        headers=CONVERSION_HEADERS,
     )
     assert response.status_code == 200
-    assert response.json()["provider"] == "muse"
+    assert response.json()["provider"] == "openai"
     assert response.json()["usage"]["inputTokens"] > 0
     assert calls == ["/v1/chat/completions"]
 
     assert local_client.delete(PATH, headers=HEADERS).json()["keyConfigured"] is False
     response = local_client.post(
-        "/api/convert", json={"strategy": "최근 5일 하락 종목 매수", "trainingConsent": True}
+        "/api/convert",
+        json={"strategy": "최근 5일 하락 종목 매수"},
+        headers=CONVERSION_HEADERS,
     )
     assert response.json()["provider"] == "mock"
     assert len(calls) == 1
@@ -149,7 +164,7 @@ def test_fresh_server_does_not_keep_previously_entered_key(local_client):
 
 
 @pytest.mark.parametrize(
-    ("actual_provider", "expected_provider"), [("mock", "muse"), ("muse", "mock")]
+    ("actual_provider", "expected_provider"), [("mock", "openai"), ("openai", "mock")]
 )
 def test_changed_provider_blocks_conversion_before_any_model_call(
     local_client, monkeypatch, actual_provider, expected_provider
@@ -161,13 +176,13 @@ def test_changed_provider_blocks_conversion_before_any_model_call(
         raise AssertionError("A mismatched provider must never run.")
 
     monkeypatch.setattr(MockSemanticProvider, "interpret", interpret)
-    monkeypatch.setattr(MuseSparkProvider, "interpret", interpret)
-    if actual_provider == "muse":
+    monkeypatch.setattr(OpenAIProvider, "interpret", interpret)
+    if actual_provider == "openai":
         local_client.post(PATH, json={"apiKey": FAKE_KEY}, headers=HEADERS)
     response = local_client.post(
         "/api/convert",
-        json={"strategy": "최근 5일 하락 종목 매수", "trainingConsent": True},
-        headers={"X-Expected-Provider": expected_provider},
+        json={"strategy": "최근 5일 하락 종목 매수"},
+        headers={**CONVERSION_HEADERS, "X-Expected-Provider": expected_provider},
     )
     assert response.status_code == 409
     assert "이번 변환은 실행하지 않았습니다" in response.json()["detail"]
@@ -178,8 +193,8 @@ def test_changed_provider_blocks_conversion_before_any_model_call(
 def test_matching_provider_allows_conversion(local_client):
     response = local_client.post(
         "/api/convert",
-        json={"strategy": "최근 5일 하락 종목 매수", "trainingConsent": True},
-        headers={"X-Expected-Provider": "mock"},
+        json={"strategy": "최근 5일 하락 종목 매수"},
+        headers={**CONVERSION_HEADERS, "X-Expected-Provider": "mock"},
     )
     assert response.status_code == 200
     assert response.json()["provider"] == "mock"
@@ -220,14 +235,16 @@ def test_real_provider_failure_reaches_ui_without_secret_or_extra_requests(
 
     monkeypatch.setattr(
         local_provider,
-        "MuseSparkProvider",
-        lambda *, api_key: MuseSparkProvider(httpx.MockTransport(handler), api_key=api_key),
+        "OpenAIProvider",
+        lambda *, api_key: OpenAIProvider(httpx.MockTransport(handler), api_key=api_key),
     )
     assert local_client.post(PATH, json={"apiKey": FAKE_KEY}, headers=HEADERS).status_code == 200
     assert not calls
 
     response = local_client.post(
-        "/api/convert", json={"strategy": strategy, "trainingConsent": True}
+        "/api/convert",
+        json={"strategy": strategy},
+        headers=CONVERSION_HEADERS,
     )
     assert response.status_code == 503
     assert response.json() == {"detail": MESSAGES[expected_code]}

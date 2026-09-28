@@ -39,13 +39,29 @@ SAFE_UPSTREAM_CODES = frozenset({
 
 
 class ProviderError(RuntimeError):
-    def __init__(self, code: str, *, retryable: bool = False) -> None:
+    def __init__(self, code: str) -> None:
         self.code = code if code in MESSAGES else "invalid_response"
-        self.retryable = retryable
         self.http_status: int | None = None
         self.upstream_code = "none"
         self.response_shape = "none"
         super().__init__(MESSAGES[self.code])
+
+
+def diagnostic_failure(exc: Exception, http_status: int | None) -> dict:
+    if isinstance(exc, ProviderError):
+        failure = exc
+    elif isinstance(exc, httpx.TimeoutException):
+        failure = ProviderError("timeout")
+    else:
+        failure = ProviderError("connection")
+    return {
+        "status": "failed",
+        "httpStatus": failure.http_status or http_status,
+        "errorCode": failure.code,
+        "upstreamCode": failure.upstream_code,
+        "responseShape": failure.response_shape,
+    }
+
 
 
 def http_provider_error(response: httpx.Response) -> ProviderError:
@@ -59,8 +75,8 @@ def http_provider_error(response: httpx.Response) -> ProviderError:
         error = {}
     code, error_type = error.get("code"), error.get("type")
 
-    def failure(kind: str, *, retryable: bool = False) -> ProviderError:
-        result = ProviderError(kind, retryable=retryable)
+    def failure(kind: str) -> ProviderError:
+        result = ProviderError(kind)
         result.http_status = response.status_code
         result.upstream_code = (
             code if isinstance(code, str) and code in SAFE_UPSTREAM_CODES
@@ -93,5 +109,5 @@ def http_provider_error(response: httpx.Response) -> ProviderError:
         # Do not amplify throttling with automatic retries.
         return failure("rate_limit")
     if response.status_code >= 500:
-        return failure("upstream", retryable=True)
+        return failure("upstream")
     return failure("invalid_request")

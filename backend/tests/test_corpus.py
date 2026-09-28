@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.app.mock_provider import MockSemanticProvider
 from backend.app.models import ConvertRequest
-from backend.app.provider import MockSemanticProvider
 from backend.app.service import HarnessService
 from backend.app.settings import DEFAULT_SIMULATION_SETTINGS
 

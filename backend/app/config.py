@@ -8,17 +8,15 @@ from pathlib import Path
 @dataclass(frozen=True)
 class AppConfig:
     environment: str
-    gateway_shared_secret: str
-    allowed_emails: frozenset[str]
     static_directory: Path
-    auth_mode: str = "gateway"
+    auth_mode: str = "supabase"
     supabase_url: str = ""
     supabase_publishable_key: str = ""
     supabase_secret_key: str = field(default="", repr=False)
     public_url: str = ""
 
     def __post_init__(self) -> None:
-        if self.auth_mode not in {"none", "gateway", "supabase"}:
+        if self.auth_mode not in {"none", "supabase"}:
             raise ValueError("AUTH_MODE 설정을 확인하세요.")
         if self.is_production and self.auth_mode == "none":
             raise ValueError("운영 환경에서는 인증을 비활성화할 수 없습니다.")
@@ -29,19 +27,12 @@ class AppConfig:
 
     @classmethod
     def from_environment(cls) -> AppConfig:
-        emails = frozenset(
-            email.strip().lower()
-            for email in os.getenv("ALLOWED_EMAILS", "").split(",")
-            if email.strip()
-        )
         hosted = os.getenv("VERCEL") == "1" or os.getenv("VERCEL_ENV") in {"production", "preview"}
         environment = os.getenv("APP_ENV", "production" if hosted else "development").lower()
         if hosted and environment != "production":
             raise ValueError("Vercel에서는 APP_ENV=production으로 설정하세요.")
         return cls(
             environment=environment,
-            gateway_shared_secret=os.getenv("GATEWAY_SHARED_SECRET", ""),
-            allowed_emails=emails,
             static_directory=Path(__file__).resolve().parent / "static",
             auth_mode=os.getenv("AUTH_MODE", "supabase"),
             supabase_url=os.getenv("SUPABASE_URL", "").rstrip("/"),

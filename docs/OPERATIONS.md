@@ -1,45 +1,27 @@
-> 2026-09-27: 아래는 이전 Cloud Run·Cloudflare 구성의 기록입니다. 현재 Vercel·Supabase 설정은 [VERCEL_SUPABASE_SETUP.md](VERCEL_SUPABASE_SETUP.md), 로컬 테스트는 [LOCAL_TEST.md](LOCAL_TEST.md)를 따릅니다.
-
 # 운영 기준
 
-## 적용된 한도
+새 배포 구성은 Vercel FastAPI·Supabase Auth/DB·OpenAI GPT-5.4 mini입니다. 키와 배포는 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md), 기존 회원 DB 설정은 [VERCEL_SUPABASE_SETUP.md](VERCEL_SUPABASE_SETUP.md)를 따릅니다. 전환 배포는 아직 실행하지 않았습니다.
 
-| 항목 | 기본값 |
-| --- | --- |
-| 회원별 요청 | 분당 2회·일일 20회·월 50회 |
-| 서비스 전체 요청 | 월 1,000회 |
-| 모델 예산 | 월 $10 (인프라 청구 별도) |
-| 동시 실행 | 서비스 전체 2건; 초과는 503으로 재시도 안내 |
-| 전략 / HTTP 본문 | 2,000자 / 16KB |
-| 모델 출력 | agent당 최대 1,024토큰 |
-| 시간 / 재시도 | agent 전체 40초 안에서 최대 1회 재시도; 전체 변환 42초 |
-| 중복 요청 | 회원 + Idempotency-Key + 동일 본문, 24시간 재사용 |
-| 결과 보관 | 24시간 후 접근 차단, 약 1분 이내 알람으로 삭제 |
+## 모델과 비용
 
-횟수는 **새 작업이 승인된 시점**에 소모됩니다. 검증 거부·공급자 오류도 재시도 비용을 발생시킬 수 있으므로 횟수를 돌려주지 않습니다. 입력 크기/인증 거부와 중복 요청·진행 조회는 소모하지 않습니다. 일·월 경계는 UTC(한국시간 오전 9시)입니다. 분당 한도는 고정 분 구간입니다.
+모델·추론 수준·출력/요청 상한·단가는 `openai_policy.py`에서 관리합니다. OpenAI 추론은 `none`, 출력은 최대 1,024토큰, 요청은 1회이며 재시도나 대체 모델 호출은 없습니다. 키 연결·상태 조회는 실제 생성 성공을 뜻하지 않습니다.
 
-`gateway/wrangler.jsonc`의 `DAILY_LIMIT`, `MONTHLY_LIMIT`, `GLOBAL_MONTHLY_LIMIT`, `MONTHLY_BUDGET_USD`로 정책을 바꿉니다. 운영진이 특정 회원에게 추가 횟수를 주려면 Worker Secret `MEMBER_MONTHLY_LIMITS`를 `{"member@example.com":100}`처럼 등록합니다. 전체 요청·예산 한도는 그대로 적용됩니다.
+GPT-5.4 mini의 100만 토큰당 일반 입력 $0.75·캐시 입력 $0.075·출력 $4.50을 적용하며 항목별 micro-USD 단위로 올림합니다. OpenAI는 시도당 34원을 내부 누적 예산에 예약합니다. 실제 공급자 청구액과 예약액은 다르며 [계산과 적용 범위](OPENAI_DEPLOYMENT.md#비용-정책)를 확인하세요. Meta 과금 조사 기록은 [META_BILLING_INVESTIGATION.md](META_BILLING_INVESTIGATION.md)에 남아 있습니다.
 
-## 비용 예약과 관찰
+## 회원과 예산
 
-처음 기획의 월 $3.51은 6개 agent 각각 입력 900·출력 180토큰이라는 가정입니다. 실제 측정액이 아닙니다. 추론 토큰과 재시도로 실제 비용이 높아질 수 있습니다.
+가입·이메일 인증 이후에도 운영자 승인까지 pending입니다. 승인된 운영자는 설정 화면에서 회원 승인·이용 중지·누적 예산을 조회합니다. 누적 20,000원 예약 제한과 월/회원 쿼터는 Supabase DB가 관리합니다. 외부 공급자의 실제 카드 청구액 제한과 동일하지 않습니다.
 
-서버는 현재 `gpt-5-mini`의 입력 $0.25/100만 토큰·출력 $2/100만 토큰 비용 프로필만 허용합니다. 각 요청에 모델 본문 크기와 출력 토큰 상한을 적용합니다. Gateway는 작업당 $0.10을 예약하고 서버가 반환한 토큰 수로 정산합니다. 실패·타임아웃 등 과금을 확인할 수 없으면 예약액을 남겨 과소 집계를 피합니다. 이 경우 운영진 화면의 비용은 실비보다 클 수 있습니다. 가격·모델 변경 시 `provider.py`의 프로필과 Gateway 예약액을 함께 점검해야 합니다. [공식 모델 문서](https://developers.openai.com/api/docs/models/gpt-5-mini)
+대기·실행 중인 요청의 ID를 유지하며 중복 확인으로 새 유료 호출을 만들지 않습니다. 결과 보관이 실패하면 화면의 경고를 확인하고 생성 코드를 바로 복사합니다.
 
-새 예약을 포함해 모델 예산을 넘으면 새 작업을 받지 않습니다. 공급자 프로젝트 예산 알림만 강제 차단으로 간주하지 않습니다. Cloud Run·Cloud Build·Artifact Registry·Cloudflare·도메인 비용과, 같은 API 키로 다른 앱에서 쓴 금액은 이 장부 범위 밖입니다. 전용 프로젝트/키와 클라우드 예산 알림을 함께 사용합니다. [OpenAI 프로젝트 예산 설명](https://help.openai.com/en/articles/9186755)
+## 연결 진단
 
-## 운영진 화면
+승인된 운영자만 `/api/admin/provider-check`를 조회합니다. 선택 모델 메타데이터만 GET으로 읽고 AI 변환·예산 예약을 실행하지 않습니다. 결과의 `providerSourceSha256`은 호출·정책·연결·오류·진단 모듈을 묶은 SHA-256입니다. 키 비교 ID와 공개 모델 식별자만 반환합니다.
 
-`ADMIN_EMAILS`에 포함된 회원에게만 페이지의 운영진 사용 현황이 나타납니다. 회원별 월 사용 횟수, 전체 통과·거부·오류 수, 비용 예약 포함 추정액, 최근 1,000건의 p95를 표시합니다. 전략 원문과 생성 코드는 운영진 API로 노출하지 않습니다. 서버는 요청 ID·상태·시간·입출력 토큰·추정 비용만 로그에 남깁니다.
+`modelAvailable`은 선택 모델 메타데이터 접근 여부입니다. 실제 생성 성공과 잔액 충분 여부는 별도 확인이 필요합니다.
 
-## 중단과 재개
+## 변경 검증
 
-`SERVICE_ENABLED=false`로 Worker를 배포하면 새 변환을 중단합니다. 이미 처리 중인 요청과 기존 결과 조회는 유지됩니다. 장애 이후 `true`로 되돌립니다. 비밀키를 회전할 때 Cloud Run과 Worker 값을 함께 교체해야 합니다. Gateway 서명 키 변경은 회원 식별자도 변경하므로 이전 쿼터가 이어지지 않습니다. 월 예산·전체 요청 한도는 유지되지만 회원 한도 초기화가 생긴다는 점을 고려해 점검 시간에 수행합니다.
+`make test`, `make lint`, `make test-frontend`로 오프라인 검증합니다. SQL 변경 시 `make test-sql`로 외부 Supabase 대신 임시 PostgreSQL을 검증합니다. `scripts/evaluate.py`의 기본 실행은 오프라인이며, OpenAI `--live --limit 1` 실행은 비용이 발생합니다.
 
-JSON/검증 오류 증가, 공급자 오류율 10% 초과, 전략 원문·키 노출 발견 시 중단 후 원인을 확인합니다. 파일럿 목표는 2주 성공 응답률 98% 이상·p95 45초 이하이며, 아직 실측하지 않았습니다.
-
-## 영속성과 한계
-
-SQLite Durable Object 트랜잭션이 전역 작업 수·쿼터·예산 예약을 함께 갱신합니다. 단순 KV 읽기/쓰기 경합으로 한도가 초과되지 않게 구성했습니다. 재시작 후 pending 기록은 최대 120초 동안 중복 실행을 막고, 그 뒤에는 해당 요청을 실패로 표시합니다. 자동으로 다시 실행하지 않습니다. 실패 시 사용자가 새 요청으로 명시적으로 시도합니다.
-
-SQLite Durable Objects는 Workers Free에서도 제공되지만, 계정의 CPU·저장소·요청 한도를 넘어서는지 첫 달에 확인해야 합니다. [Cloudflare Durable Objects](https://developers.cloudflare.com/durable-objects/)
+키 입력 후 `make deploy-openai`로 배포하며, 저장한 코드·환경변수는 배포 시점부터 운영에 적용됩니다. 이전 Cloudflare·Cloud Run 운영 경로는 제거했습니다.

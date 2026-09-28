@@ -1,5 +1,7 @@
 # 배포 후 변환 실패 복구 작업
 
+> 이 문서는 이전 시점의 조사·결정 기록입니다. 현재 코드는 GPT 전용이며 Meta 연결과 Contributor 동의 코드는 제거했습니다. 현재 모델·설정은 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md)를 확인하세요.
+
 ## 현재 확인한 사실
 
 2026-09-28 10:03 KST 기준 운영 배포는 `a9eb21c`입니다. 로컬과 운영 서버에서 사용하는
@@ -112,3 +114,80 @@ AI 요청 1회, 오류 자동 재시도 0회, 검색·도구 호출 0회, 출력
 진단 코드의 [GitHub CI](https://github.com/blockcoder-sj/natural-language-brain-alpha-harness/actions/runs/36364382738)에서 backend(임시 PostgreSQL 포함), frontend, gateway가 모두 통과했습니다.
 지역 변경은 아직 배포하지 않았습니다. 현재 변환 실패가 해결됐다고
 판단하려면 운영 연결이 정상이고 새로 승인한 실제 변환 1회가 성공해야 합니다.
+
+
+## 부록: 기존 배포 설정 문서의 진단 기록
+
+## 배포 후 Meta 404 진단 (2026-09-28)
+
+Chrome에서 Production `c5f45cd`의 Ready 상태와 실제 `/api/convert` 요청 2건의
+Meta `POST /v1/chat/completions` 404를 확인했습니다. Supabase 인증·승인·한도 조회는
+정상이며, 연결 방식은 `meta`, 고정 모델은 `meta/muse-spark-1.3-contributor`입니다.
+같은 날 로컬에 저장된 키의 `GET /v1/models`는 200으로 Contributor 모델을 반환했습니다.
+이 모델 목록 조회는 전략이나 프롬프트를 보내지 않으며 AI 생성을 하지 않습니다.
+당시에는 서버 키 일치 여부와 서버 모델 접근 여부가 미확정이었으며, 아래 후속 진단으로 키 일치와 서버 목록의 Contributor 누락을 확인했습니다.
+
+진단 코드를 배포한 뒤 운영자로 로그인한 Chrome에서
+`/api/admin/provider-check`를 열어 **배포 서버의** Meta 모델 목록을 확인할 수 있습니다.
+이 경로는 승인된 관리자만 접근할 수 있고, 키·원문 오류·다른 모델 목록을 반환하지 않습니다.
+변환 횟수·예산을 예약하지 않으며 자동 재시도나 실제 AI 생성도 하지 않습니다.
+`httpStatus=200`과 `modelAvailable=true`면 해당 서버 키의 모델 목록에 Contributor가 포함됨을 확인합니다. 실제 생성 성공은 별도 검증이 필요합니다.
+실제 변환 로그에는 HTTP 상태·허용 목록에 포함된 공급자 오류 코드·응답 종류만 남깁니다.
+일반 404와 명시적 `model_not_found`를 구분하며 비밀키·전략·원문 오류는 기록하지 않습니다.
+
+2026-09-28 09:30 KST 운영자 세션의 진단 요청이 배포 서버까지 도달했고, Vercel 로그에서 Meta `GET /v1/models` 200과 진단 경로 200을 확인했습니다. Chrome은 응답 화면을 `ERR_BLOCKED_BY_CLIENT`로 표시해 `modelAvailable` 값은 읽지 못했습니다. 따라서 키의 모델 목록 조회 인증·네트워크 연결은 확인했지만 Contributor 생성 권한이나 실제 생성 성공은 아직 확인한 것이 아닙니다. 미인증 별도 GET은 401로 차단됐습니다.
+
+진단 버전 `896e2be`는 로컬 Python 테스트 297개 통과·SQL 관련 30개 건너뜀, 린트 통과를 확인했습니다. 해당 GitHub CI는 backend(PostgreSQL 포함)·frontend·gateway 모두 통과했습니다. 이번 변경은 DB 마이그레이션을 요구하지 않습니다. 진단 코드 배포와 승인받은 실제 AI 1회 검증은 완료했으며 실패 원인과 다음 비교는 아래에 기록합니다.
+
+### 승인받은 실제 변환 1회 결과와 다음 비교
+
+2026-09-28 09:34:59 KST 운영자 승인 후 단순 당일 수익률 역순위 전략으로
+실제 변환을 **1회만** 실행했습니다. 요청 ID는 `ccxwp-1790555699362-6bc5524baa8d`이며,
+배포 `dpl_AYRrKht34VAoGC5YUdmQ8BLpuqyw`의 로그에서 Supabase 인증·승인·변환 예약·
+예산 예약·결과 저장은 200, Meta 생성 요청은 404를 확인했습니다.
+안전한 오류 로그는
+`code=model_access http_status=404 upstream_code=model_not_found response_shape=json_error`
+입니다. 자동 재시도나 다른 모델 호출은 없었습니다.
+
+모델 ID `muse-spark-1.3-contributor`는 공식 문서와 일치합니다.
+Meta는 이 오류를 모델 ID 또는 팀의 모델 접근 문제로 안내하지만, 이 로그만으로
+키 불일치나 지역 제한을 단정할 수 없습니다. [Meta 오류 안내](https://dev.meta.ai/docs/error-handling).
+
+후속 진단 변경은 Chrome의 JSON 화면 차단 때문에 응답을 읽지 못한 문제를 줄이기 위해
+같은 `/api/admin/provider-check`에 HTML 표시를 추가합니다. 브라우저에서 열면 HTML,
+API 클라이언트에서는 JSON을 반환하며 관리자 승인 확인·캐시 금지·CSP·프레임 차단은 유지합니다.
+`keyFingerprint`는 저장된 API 키 SHA-256의 앞 16자리로, 로컬과 서버가 같은 키를 쓰는지
+비교하기 위한 값입니다. 키 원문은 반환하거나 로그에 남기지 않습니다.
+모델 목록 조회만 수행하므로 실제 AI 생성·변환 횟수·예산 예약이 없습니다.
+새 변경은 테스트 299개 통과·SQL 관련 30개 건너뜀·린트 통과했으며,
+GitHub CI의 backend(PostgreSQL 포함)·frontend·gateway도 모두 통과했습니다.
+2026-09-28 09:46 KST 운영자 재배포 승인 후 `2ed26fa`를 Production에 배포했습니다.
+배포 ID는 `dpl_5txMpR7RhucAqMCyuN28RxVwHuWt`이며 Ready와 기본 도메인 적용을 확인했습니다.
+관리자 HTML 진단 화면에서 다음 값을 읽었습니다.
+
+```json
+{
+  "apiProvider": "meta",
+  "model": "muse-spark-1.3-contributor",
+  "inferencePerformed": false,
+  "status": "failed",
+  "httpStatus": 200,
+  "modelAvailable": false,
+  "errorCode": "model_access",
+  "keyFingerprint": "aa0ecc064a45a9ec"
+}
+```
+
+직후 로컬에서 같은 키로 `GET /v1/models`를 다시 조회한 결과 200이며
+`muse-spark-1.3-contributor`가 포함됐습니다. 키 비교 ID도 동일하고 로컬 HTTP 프록시는
+설정되지 않았습니다. 이번 후속 진단은 서버 1회·로컬 1회 모델 목록 조회만 했고
+실제 AI 생성은 추가로 실행하지 않았습니다. Chrome에서 진단 결과가 보이지 않던 문제는
+해결됐으나 변환 실패는 아직 남아 있습니다.
+
+동일한 키·모델 주소에서 요청 환경에 따라 Meta의 모델 목록이 달라지는 현상까지
+확인했습니다. Meta의 지역/IP 판정 또는 카탈로그 라우팅 차이는 가능성이며 원인으로
+확정하지 않았습니다. 지역 설정·키·모델·제공자를 임의 변경하지 않았습니다.
+Meta 상태 화면은 `Status information is unavailable`을 표시했으므로 전체 서비스 장애도
+확정하지 않았습니다. [지원 문의 초안](META_SERVER_MODEL_ACCESS_REPORT.md)은 문서로만
+준비했으며 Meta에 전송하지 않았습니다.
+추가 실제 AI 요청은 새로운 승인 없이 실행하지 않습니다.

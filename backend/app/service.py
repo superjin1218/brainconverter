@@ -7,7 +7,7 @@ import uuid
 from .compiler import compile_fe, intent_mapping, source_guards, validate_compiled_fe
 from .models import ConversionResponse, ConvertRequest, ValidationSummary
 from .prompts import BASE_SYSTEM_PROMPT
-from .provider import SemanticProvider
+from .provider_types import SemanticProvider
 from .settings import resolve_simulation_settings
 
 

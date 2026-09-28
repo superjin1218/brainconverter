@@ -1,5 +1,7 @@
 # 확정된 제품 결정
 
+> 이 문서는 이전 시점의 조사·결정 기록입니다. 현재 코드는 GPT 전용이며 Meta 연결과 Contributor 동의 코드는 제거했습니다. 현재 모델·설정은 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md)를 확인하세요.
+
 ## 2026-09-26 배포 방향 변경
 
 - 사용자가 배포 플랫폼으로 **Vercel**, 회원 인증·데이터 관리용 백엔드로 **Supabase**를 선택했습니다. 오라클 VM이나 Google Cloud 서버를 별도로 운영하는 방향으로 진행하지 않습니다.

@@ -1,0 +1,13 @@
+.git/
+.env
+.env.*
+.venv/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+backend/tests/
+scripts/
+docs/
+supabase/
+artifacts/
+node_modules/

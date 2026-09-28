@@ -33,7 +33,7 @@ class Element {
 }
 
 let instance = 0;
-const realState = {provider: "muse", keyConfigured: true, model: "meta/muse-spark-1.3-contributor"};
+const realState = {provider: "openai", keyConfigured: true, model: "gpt-5.4-mini"};
 const mockState = {provider: "mock", keyConfigured: false, model: realState.model};
 const response = (body, status = 200) => new Response(JSON.stringify(body), {status});
 
@@ -57,7 +57,11 @@ async function dashboard(t, state = realState, member = undefined, localAvailabl
     if (url === "/api/auth/config") return response({enabled: member !== undefined, configured: true});
     if (url === "/api/auth/me") return response(control.member || {detail: "로그인하세요."}, control.member ? 200 : 401);
     if (url.startsWith("/api/admin/members?") || url === "/api/admin/members") return response({members: [{id: "member-id", email: "member@example.test", displayName: "신청자", status: "pending", role: "member"}], nextCursor: null});
-    if (url === "/api/admin/budget") return response({limitKrw: 20000, accountedKrw: 40, stopped: false});
+    if (url === "/api/admin/budget") return response({
+      limitKrw: 20000, accountedKrw: 34, stopped: false, allowancePerAttemptKrw: 34,
+      estimatedCostMicrousd: 954, attempts: 1, unconfirmedAttempts: 0,
+      inputTokens: 828, outputTokens: 74, since: "2026-09-28T07:00:00Z",
+    });
     if (url.startsWith("/api/admin/members/")) {
       control.authCalls.push({url, options});
       return response({status: JSON.parse(options.body).status});
@@ -141,7 +145,7 @@ test("a safe provider failure is displayed with no automatic conversion retry", 
   ui.control.status = 503;
   await ui.submit();
   assert.equal(ui.control.calls.length, 1);
-  assert.equal(ui.control.calls[0].headers["X-Expected-Provider"], "muse");
+  assert.equal(ui.control.calls[0].headers["X-Expected-Provider"], "openai");
   assert.equal(ui.element("#error-message").textContent, detail);
 });
 
@@ -149,7 +153,7 @@ test("a successful AI result is rendered with the expected provider guard", asyn
   const ui = await dashboard(t);
   await ui.submit();
   assert.equal(ui.control.calls.length, 1);
-  assert.equal(ui.control.calls[0].headers["X-Expected-Provider"], "muse");
+  assert.equal(ui.control.calls[0].headers["X-Expected-Provider"], "openai");
   assert.equal(ui.element("#expression-output").textContent, "-rank(returns)");
   assert.equal(ui.element("#result-content").hidden, false);
   assert.equal(ui.element("#result-status").textContent, "변환 완료");
@@ -181,13 +185,7 @@ test("a conversion timeout does not immediately retry a potentially billable req
   assert.equal(ui.element("#submit-button").disabled, false);
 });
 
-test("Contributor consent is required before any paid request", async t => {
-  const ui = await dashboard(t);
-  ui.element("#training-consent").checked = false;
-  await ui.submit();
-  assert.equal(ui.control.calls.length, 0);
-  assert.match(ui.element("#error-message").textContent, /학습 활용 안내/);
-});
+
 
 for (const status of [null, "pending", "rejected", "suspended"]) {
   test(`the dashboard and conversion are inaccessible for ${status || "anonymous"} users`, async t => {
@@ -210,7 +208,7 @@ test("approved members can convert but cannot see member administration", async 
   assert.equal(ui.element("#open-settings").hidden, true);
   await ui.submit();
   assert.equal(ui.control.calls.length, 1);
-  assert.equal(JSON.parse(ui.control.calls[0].body).trainingConsent, true);
+  assert.deepEqual(Object.keys(JSON.parse(ui.control.calls[0].body)).sort(), ["settings", "strategy"]);
   assert.equal(ui.element("#metric-confidence").textContent, "AI 1회 해석");
 });
 
@@ -254,14 +252,28 @@ test("a deployed operator can manage members in settings without a local key end
   assert.match(ui.element("#provider-description").textContent, /공용 키를 자동/);
   await ui.submit();
   assert.equal(ui.control.calls.length, 1);
-  assert.equal(ui.control.calls[0].headers["X-Expected-Provider"], "muse");
+  assert.equal(ui.control.calls[0].headers["X-Expected-Provider"], "openai");
 });
 
-test("operator settings display the cumulative budget without making a conversion", async t => {
+test("operator settings separate GPT token cost and reserve without making a conversion", async t => {
   const ui = await dashboard(t, realState, {status: "approved", role: "admin"}, false);
   await ui.element("#open-settings").emit("click");
-  assert.match(ui.element("#ai-budget-status").textContent, /누적 40 \/ 20,000원/);
-  assert.match(ui.element("#ai-budget-status").textContent, /보수적 계산/);
+  assert.match(ui.element("#ai-budget-status").textContent, /예산 예약 · 34 \/ 20,000원/);
+  assert.match(ui.element("#ai-budget-status").textContent, /예상 비용 \$0\.000954/);
+  assert.match(ui.element("#ai-budget-status").textContent, /호출 시도 1회/);
+  assert.match(ui.element("#ai-budget-status").textContent, /입력 828 · 출력 74토큰/);
+  assert.equal(ui.control.calls.length, 0);
+});
+
+test("unreported GPT usage is shown separately from the known cost", async t => {
+  const ui = await dashboard(t, realState, {status: "approved", role: "admin"}, false);
+  ui.control.intercept = async url => url === "/api/admin/budget" ? response({
+    limitKrw: 20000, accountedKrw: 34, stopped: false, allowancePerAttemptKrw: 34,
+    estimatedCostMicrousd: 0, attempts: 1, unconfirmedAttempts: 1,
+    inputTokens: 0, outputTokens: 0, since: "2026-09-28T07:00:00Z",
+  }) : undefined;
+  await ui.element("#open-settings").emit("click");
+  assert.match(ui.element("#ai-budget-status").textContent, /비용 미확인 1회 별도/);
   assert.equal(ui.control.calls.length, 0);
 });
 
@@ -296,11 +308,10 @@ test("a deployed missing shared key prevents any conversion call", async t => {
   assert.equal(ui.element("#open-settings").hidden, true);
 });
 
-test("logout hides the dashboard and resets training consent", async t => {
+test("logout hides the dashboard and blocks conversions", async t => {
   const ui = await dashboard(t, realState, {status: "approved", role: "member", email: "member@example.test"});
   await ui.element("#auth-logout").emit("click");
   assert.equal(ui.element("#dashboard").hidden, true);
-  assert.equal(ui.element("#training-consent").checked, false);
   assert.equal(ui.element("#open-settings").hidden, true);
   await ui.submit();
   assert.equal(ui.control.calls.length, 0);
@@ -347,10 +358,10 @@ test("logout erases private form, hidden results and administrator data", async 
   ui.control.result.warnings = ["private warning"];
   ui.control.result.intentMapping = [{requirement: "private", expression: "secret"}];
   await ui.submit();
-  ui.element("#admin-usage").textContent = "private admin usage";
+  ui.element("#ai-budget-status").textContent = "private budget status";
   await ui.element("#auth-logout").emit("click");
   for (const selector of ["#strategy", '[name="region"]']) assert.equal(ui.element(selector).value, "");
-  for (const selector of ["#expression-output", "#settings-copy", "#error-message", "#admin-usage"])
+  for (const selector of ["#expression-output", "#settings-copy", "#error-message", "#ai-budget-status"])
     assert.equal(ui.element(selector).textContent, "");
   for (const selector of ["#intent-mapping", "#warnings-list", "#settings-grid"])
     assert.equal(ui.element(selector).children.length, 0);
@@ -363,10 +374,8 @@ test("logout erases private form, hidden results and administrator data", async 
 test("same member refresh preserves draft while identity change clears it", async t => {
   const ui = await dashboard(t, realState, {id: "a", status: "approved", role: "member"});
   ui.element("#strategy").value = "private draft";
-  ui.element("#training-consent").checked = false;
   await ui.element("#auth-refresh").emit("click");
   assert.equal(ui.element("#strategy").value, "private draft");
-  assert.equal(ui.element("#training-consent").checked, false);
   ui.control.member = {id: "b", status: "approved", role: "member"};
   await ui.element("#auth-refresh").emit("click");
   assert.equal(ui.element("#strategy").value, "");
@@ -553,4 +562,20 @@ test("failed member reload removes inert rows and offers a working retry", async
   const row = ui.element("#members-list").children[0];
   await row.children[1].children.find(button => button.textContent === "승인").emit("click");
   assert.ok(ui.control.authCalls.some(call => call.url === "/api/admin/members/member-id"));
+});
+
+
+test("OpenAI conversion sends the fixed provider header", async t => {
+  const ui = await dashboard(t, {provider: "openai", model: "gpt-5.4-mini", keyConfigured: true});
+  assert.equal(ui.element("#provider-chip").textContent, "실제 AI 모드");
+  await ui.submit();
+  assert.equal(ui.control.calls.length, 1);
+  assert.equal(ui.control.calls[0].headers["X-Expected-Provider"], "openai");
+});
+
+test("OpenAI with no key blocks conversion before the paid endpoint", async t => {
+  const ui = await dashboard(t, {provider: "openai", model: "gpt-5.4-mini", keyConfigured: false});
+  await ui.submit();
+  assert.equal(ui.control.calls.length, 0);
+  assert.match(ui.element("#error-message").textContent, /키가 설정되지/);
 });

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import ipaddress
-import os
 import re
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 
-from .provider import MUSE_MODEL, MockSemanticProvider, MuseSparkProvider, muse_api_key
+from .mock_provider import MockSemanticProvider
+from .openai_provider import OpenAIProvider
+from .provider import provider_status
 from .service import HarnessService
 
 
@@ -54,9 +55,7 @@ def local_provider_router(application: FastAPI) -> APIRouter:
 
     def status() -> dict:
         service = application.state.harness_service
-        provider = service.provider.name if service else os.getenv("HARNESS_PROVIDER", "muse")
-        configured = provider == "muse" and (service is not None or bool(muse_api_key()))
-        return {"provider": provider, "keyConfigured": configured, "model": MUSE_MODEL}
+        return provider_status(service.provider if service else None)
 
     def require_idle() -> None:
         if application.state.active_conversions:
@@ -80,7 +79,7 @@ def local_provider_router(application: FastAPI) -> APIRouter:
             )
         require_idle()
         try:
-            service = HarnessService(MuseSparkProvider(api_key=key.strip()))
+            service = HarnessService(OpenAIProvider(api_key=key.strip()))
         except (RuntimeError, ValueError):
             raise HTTPException(status_code=503, detail="로컬 모델 설정을 확인하세요.") from None
         application.state.harness_service = service

@@ -2,8 +2,8 @@ import {HarnessApi} from "./api.js";
 import {StrategyForm} from "./form.js";
 import {DashboardView} from "./view.js";
 import {registerConversionTool} from "./webmcp.js";
-import {LocalProviderPanel} from "./provider.js?v=admin-usage-1";
-import {MembershipPanel} from "./membership.js?v=security-2";
+import {LocalProviderPanel} from "./provider.js?v=policy-1";
+import {MembershipPanel} from "./membership.js?v=gpt-accounting-1";
 
 class HarnessDashboard {
   constructor() {
@@ -18,8 +18,7 @@ class HarnessDashboard {
         this.form.setBusy(false);
         this.view.clear();
         this.localProvider.setBusy(false);
-        this.localProvider.input.value = "";
-        this.localProvider.feedback.textContent = "";
+        this.localProvider.clearFeedback();
         document.querySelector("#auth-logout").disabled = false;
       }
       const approved = !this.membership.enabled || this.membership.member?.status === "approved";
@@ -54,7 +53,6 @@ class HarnessDashboard {
     });
     Promise.all([this.providerReady, this.authReady]).then(() => this.refreshUsage());
     document.querySelector("#refresh-usage").addEventListener("click", () => this.refreshUsage());
-    document.querySelector("#refresh-admin").addEventListener("click", () => this.refreshAdmin());
   }
 
   async refreshUsage() {
@@ -65,7 +63,6 @@ class HarnessDashboard {
     document.querySelector("#refresh-usage").hidden = !this.membership.enabled || !admin;
     if (!showUsage) {
       document.querySelector("#quota-status").textContent = "";
-      document.querySelector("#admin-panel").hidden = true;
       return;
     }
     try {
@@ -78,27 +75,8 @@ class HarnessDashboard {
           : this.localProvider.state?.keyConfigured
             ? "실제 AI 모드 · 변환 시 API 비용 발생 · 회원 한도는 배포 후 적용"
             : "API 연결 상태를 확인하세요.";
-      if (usage?.admin) {
-        document.querySelector("#admin-panel").hidden = false;
-        await this.refreshAdmin();
-      }
     } catch {
       if (revision === this.membership.revision) document.querySelector("#quota-status").textContent = "사용량을 확인하지 못했습니다.";
-    }
-  }
-
-  async refreshAdmin() {
-    if (this.membership.enabled && !(this.membership.member?.status === "approved" && this.membership.member.role === "admin")) return;
-    const revision = this.membership.revision;
-    try {
-      const usage = await this.api.usage(true);
-      if (revision !== this.membership.revision) return;
-      if (usage) document.querySelector("#admin-usage").textContent =
-        `이번 달 ${usage.requests}회 · 통과 ${usage.passed} · 거부 ${usage.rejected} · 오류 ${usage.errors}\n` +
-        `모델 비용(예약 포함) $${(usage.costMicrousd / 1000000).toFixed(3)} · p95 ${(usage.p95Ms / 1000).toFixed(1)}초\n` +
-        usage.members.map(member => `${member.email}: ${member.used}회`).join("\n");
-    } catch {
-      if (revision === this.membership.revision) document.querySelector("#admin-usage").textContent = "운영 현황을 불러오지 못했습니다.";
     }
   }
 
@@ -119,12 +97,8 @@ class HarnessDashboard {
       this.api.assertSession(generation);
       const expectedProvider = await this.localProvider.prepareConversion();
       this.api.assertSession(generation);
-      const trainingConsent = document.querySelector("#training-consent").checked;
-      if (expectedProvider !== "mock" && !trainingConsent) {
-        throw new Error("Contributor 모델의 학습 활용 안내에 동의해 주세요.");
-      }
       const result = await this.api.convert(
-        strategy, settings, expectedProvider, trainingConsent,
+        strategy, settings, expectedProvider,
         progress => { if (generation === this.api.generation) this.view.showLoading(progress); },
       );
       this.api.assertSession(generation);

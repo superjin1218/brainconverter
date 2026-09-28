@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 from backend.app.config import AppConfig
 from backend.app.main import create_app
 from backend.app.membership import ACCESS_COOKIE, REFRESH_COOKIE, same_origin
-from backend.app.provider import MockSemanticProvider, MuseSparkProvider
+from backend.app.mock_provider import MockSemanticProvider
+from backend.app.openai_provider import OpenAIProvider
 from backend.app.service import HarnessService
 
 ORIGIN = "https://brain.example.test"
@@ -96,8 +97,6 @@ def site():
     }
     config = AppConfig(
         environment="production",
-        gateway_shared_secret="",
-        allowed_emails=frozenset(),
         static_directory=AppConfig.from_environment().static_directory,
         auth_mode="supabase",
         supabase_url="https://supabase.example.test",
@@ -107,7 +106,7 @@ def site():
     )
 
     class CountingProvider(MockSemanticProvider):
-        name = "muse"
+        name = "openai"
 
         async def interpret(self, system_prompt, strategy):
             state["aiCalls"] += 1
@@ -164,6 +163,8 @@ def site():
                 assert len(payload["p_request_hash"]) == 64
                 return httpx.Response(200, json={"state": state["budget"]})
             if path.endswith("/brain_reserve"):
+                if state.get("reserveFails"):
+                    return httpx.Response(503, json={"message": SECRET})
                 return httpx.Response(
                     200,
                     json={
@@ -220,10 +221,10 @@ def connect(client):
     return response
 
 
-def convert(client, *, consent=True, headers=None):
+def convert(client, *, headers=None):
     return client.post(
         "/api/convert",
-        json={"strategy": STRATEGY, "trainingConsent": consent},
+        json={"strategy": STRATEGY},
         headers={**HEADERS, "Idempotency-Key": str(uuid4()), **(headers or {})},
     )
 
@@ -238,10 +239,8 @@ def test_anonymous_and_spoofed_email_cannot_reach_ai(site):
 
 def test_provider_status_requires_approval_and_never_exposes_or_calls_key(site, monkeypatch):
     client, state, _ = site
-    monkeypatch.setenv("HARNESS_PROVIDER", "muse")
-    monkeypatch.delenv("AI_GATEWAY_API_KEY", raising=False)
-    monkeypatch.delenv("VERCEL_OIDC_TOKEN", raising=False)
-    monkeypatch.setenv("AI_API_KEY", "server-only-fake-gateway-key")
+    monkeypatch.setenv("HARNESS_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "server-only-fake-openai-key")
     assert client.get("/api/provider").status_code == 401
     connect(client)
     assert client.get("/api/provider").status_code == 403
@@ -249,14 +248,14 @@ def test_provider_status_requires_approval_and_never_exposes_or_calls_key(site, 
     response = client.get("/api/provider")
     assert response.status_code == 200
     assert response.json() == {
-        "provider": "muse",
-        "model": "meta/muse-spark-1.3-contributor",
+        "provider": "openai",
+        "model": "gpt-5.4-mini",
         "keyConfigured": True,
         "localKeyEntry": False,
     }
-    assert "server-only-fake-gateway-key" not in response.text
+    assert "server-only-fake-openai-key" not in response.text
     assert state["aiCalls"] == 0
-    monkeypatch.delenv("AI_API_KEY")
+    monkeypatch.delenv("OPENAI_API_KEY")
     assert client.get("/api/provider").json()["keyConfigured"] is False
 
 
@@ -314,15 +313,6 @@ def test_queued_request_claims_once_and_polling_never_calls_ai(site):
     assert client.get(f"/api/jobs/{request}").status_code == 200
     assert convert(client, headers={"Idempotency-Key": request}).status_code == 200
     assert state["aiCalls"] == 1
-
-
-def test_training_acknowledgement_is_required_before_ai_or_quota(site):
-    client, state, _ = site
-    state["status"] = "approved"
-    connect(client)
-    assert convert(client, consent=False).status_code == 400
-    assert state["aiCalls"] == 0
-    assert not any(path.endswith("brain_reserve") for path, _ in state["calls"])
 
 
 def test_expired_or_unconfirmed_session_cannot_convert(site):
@@ -474,36 +464,43 @@ def test_budget_stop_or_unavailable_ledger_prevents_any_paid_call(site, budget, 
     result = convert(client)
     assert result.status_code == code
     assert state["aiCalls"] == 0
+
     finish = [body for path, body in state["calls"] if path.endswith("brain_finish")]
     assert finish[-1]["p_failed"] is True
     assert SECRET not in result.text
 
 
+@pytest.mark.parametrize("budget,expected", [("reserved", 200), ("budget_exhausted", 402)])
+def test_openai_needs_fixed_budget_before_inference(site, budget, expected):
+    client, state, _ = site
+    state.update(status="approved", budget=budget)
+    connect(client)
+    response = convert(client)
+    assert response.status_code == expected
+    assert state["aiCalls"] == (1 if expected == 200 else 0)
+    reserves = [body for path, body in state["calls"] if path.endswith("brain_budget_reserve")]
+    assert len(reserves) == 1
+    assert reserves[0]["p_allowance_krw"] == 34
+
+
 @pytest.mark.parametrize("accept", ["application/json", "text/html"])
-@pytest.mark.parametrize("details", [False, True])
 def test_provider_check_is_admin_only_and_never_reserves_usage_or_calls_inference(
-    site, monkeypatch, accept, details
+    site, accept
 ):
     client, state, _ = site
     client.headers["accept"] = accept
-    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
     metadata_calls = []
-    fake_ai_key = "private-fake-meta-key-never-a-real-key"
-    path = "/api/admin/provider-check" + ("?details=true" if details else "")
+    fake_ai_key = "private-fake-openai-key-never-a-real-key"
+    path = "/api/admin/provider-check"
 
     def handler(request):
         metadata_calls.append(request)
         assert request.method == "GET"
         assert not request.content
-        if len(metadata_calls) == 2:
-            assert str(request.url) == (
-                "https://api.meta.ai/v1/models/muse-spark-1.3-contributor"
-            )
-            return httpx.Response(200, json={"id": "muse-spark-1.3-contributor"})
-        assert str(request.url) == "https://api.meta.ai/v1/models"
-        return httpx.Response(200, json={"data": [{"id": "muse-spark-1.3-contributor"}]})
+        assert str(request.url) == "https://api.openai.com/v1/models/gpt-5.4-mini"
+        return httpx.Response(200, json={"id": "gpt-5.4-mini"})
 
-    provider = MuseSparkProvider(httpx.MockTransport(handler), api_key=fake_ai_key)
+    provider = OpenAIProvider(httpx.MockTransport(handler), api_key=fake_ai_key)
     client.app.state.harness_service = HarnessService(provider)
     assert client.get(path).status_code == 401
     connect(client)
@@ -526,21 +523,19 @@ def test_provider_check_is_admin_only_and_never_reserves_usage_or_calls_inferenc
         assert response.json()["modelAvailable"] is True
         assert response.json()["inferencePerformed"] is False
         assert response.json()["keyVariable"] == "explicit"
-        if details:
-            assert response.json()["selectedModel"]["modelAvailable"] is True
         fingerprint = response.json()["keyFingerprint"]
         assert len(fingerprint) == 16 and set(fingerprint) <= set("0123456789abcdef")
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-frame-options"] == "DENY"
     assert "script-src 'self'" in response.headers["content-security-policy"]
-    assert len(metadata_calls) == (2 if details else 1)
+    assert len(metadata_calls) == 1
     assert state["aiCalls"] == 0
     assert not any("brain_reserve" in path or "budget" in path for path, _ in state["calls"])
     for value in (fake_ai_key, ACCESS, REFRESH, SECRET, PASSWORD):
         assert value not in response.text
     state["status"] = "suspended"
     assert client.get(path).status_code == 403
-    assert len(metadata_calls) == (2 if details else 1)
+    assert len(metadata_calls) == 1
 
 
 def test_provider_diagnostic_html_escapes_values():
@@ -702,3 +697,15 @@ def test_member_list_compatibility_remains_admin_only(site):
     assert client.get("/api/admin/members", params={"status": "approved"}).status_code == 403
     assert not any(path.endswith(("/brain_members", "/brain_members_page"))
                    for path, _ in state["calls"])
+
+
+
+def test_failed_reservation_cannot_finish_a_job_it_does_not_own(site):
+    client, state, _ = site
+    connect(client)
+    state.update(status="approved", reserveFails=True)
+    result = convert(client)
+    assert result.status_code == 503
+    assert state["aiCalls"] == 0
+    assert not any(path.endswith("brain_finish") for path, _ in state["calls"])
+    assert client.app.state.active_conversions == 0

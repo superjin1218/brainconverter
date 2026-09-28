@@ -1,10 +1,11 @@
+import {budgetSummary} from "./accounting.js";
+
 export class MembershipPanel {
   constructor(api, onChange) {
     this.api = api;
     this.onChange = onChange;
     this.enabled = true;
     this.member = null;
-    this.consentMemberKey = null;
     this.revision = 0;
     this.refreshSequence = 0;
     this.memberListSequence = 0;
@@ -125,7 +126,7 @@ export class MembershipPanel {
       document.querySelector("#members-next").disabled = true;
       document.querySelector("#members-status").value = "";
       document.querySelector("#members-query").value = "";
-      for (const id of ["#members-feedback", "#ai-budget-status", "#admin-usage", "#quota-status"]) {
+      for (const id of ["#members-feedback", "#ai-budget-status", "#quota-status"]) {
         document.querySelector(id).textContent = "";
       }
     }
@@ -184,14 +185,6 @@ export class MembershipPanel {
 
   render() {
     const approved = this.member?.status === "approved";
-    const consentMemberKey = approved && this.member.role === "member"
-      ? this.member.id || this.member.email || "member"
-      : null;
-    // Set the member default once; keep a user's opt-out during status refreshes.
-    if (consentMemberKey && consentMemberKey !== this.consentMemberKey) {
-      document.querySelector("#training-consent").checked = true;
-    }
-    this.consentMemberKey = consentMemberKey;
     this.panel.hidden = approved;
     document.querySelector("#dashboard").hidden = !approved;
     document.querySelector("#auth-login-card").hidden = !!this.member;
@@ -214,7 +207,6 @@ export class MembershipPanel {
     this.setMember(null, true);
     this.broadcastSessionChange();
     const revision = this.revision;
-    document.querySelector("#training-consent").checked = false;
     for (const id of ["#auth-email", "#auth-name", "#auth-password"]) document.querySelector(id).value = "";
     try {
       const result = await pending;
@@ -243,7 +235,7 @@ export class MembershipPanel {
     try {
       const budget = await this.api.budget();
       if (!current()) return;
-      budgetLabel.textContent = `${budget.stopped ? "AI 변환 중지" : "AI 비용 한도"} · 누적 ${budget.accountedKrw.toLocaleString()} / ${budget.limitKrw.toLocaleString()}원 (보수적 계산)`;
+      budgetLabel.textContent = budgetSummary(budget);
     } catch {
       if (!current()) return;
       budgetLabel.textContent = "AI 비용 한도를 확인하지 못했습니다. 운영 설정을 확인하세요.";

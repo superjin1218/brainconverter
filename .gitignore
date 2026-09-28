@@ -4,14 +4,9 @@
 .env.*
 !.env.*.example
 .vercel/
-.deploy.env
-gateway/.dev.vars
-gateway/.dev.vars.*
-!.dev.vars.example
 artifacts/
 .venv/
 node_modules/
-.wrangler/
 dist/
 __pycache__/
 .pytest_cache/

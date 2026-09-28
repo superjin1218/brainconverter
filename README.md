@@ -2,19 +2,22 @@
 
 자연어 전략을 FASTEXPR 초안과 BRAIN 설정 12개로 변환합니다. 웹사이트는 Vercel, 회원가입·승인·사용량 DB는 Supabase를 사용합니다. 별도 Google Cloud·Oracle·Cloudflare 서버가 필요하지 않습니다.
 
-AI는 **Muse Spark 1.3 Contributor**로 고정했습니다. 변환 규칙을 담은 [SKILL.md](backend/app/skills/brain-strategy/SKILL.md)를 시스템 지침으로 읽어 **한 번** 해석합니다. Python이 구조·원문 조건을 검사하고 허용된 FASTEXPR를 생성합니다. 여러 에이전트의 합의나 자동 모델 재시도는 사용하지 않습니다.
+새 배포 모델은 **OpenAI GPT-5.4 mini**, 추론은 최저값 **none**으로 고정했습니다. 실제 호출은 OpenAI만 지원합니다. 변환 규칙을 담은 [SKILL.md](backend/app/skills/brain-strategy/SKILL.md)를 시스템 지침으로 읽어 **한 번** 해석합니다. Python이 구조·원문 조건을 검사하고 허용된 FASTEXPR를 생성합니다. 여러 에이전트의 합의나 자동 모델 재시도는 사용하지 않습니다.
 
 ## 먼저 볼 문서
+
+- 다음 작업을 위한 현재 맥락: [SESSION_CONTEXT.md](docs/SESSION_CONTEXT.md)
+- 새 OpenAI 키 입력·한 번에 배포: [OPENAI_DEPLOYMENT.md](docs/OPENAI_DEPLOYMENT.md)
 
 - 로컬 실행·키 연결: [LOCAL_TEST.md](docs/LOCAL_TEST.md)
 - Vercel·Supabase 회원 사이트 설정: [VERCEL_SUPABASE_SETUP.md](docs/VERCEL_SUPABASE_SETUP.md)
 - 완료한 검증과 아직 남은 작업: [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)
-- 모델 검증 범위·월 1,000회 비용: [MODEL_COST_AND_VALIDATION.md](docs/MODEL_COST_AND_VALIDATION.md)
+- 모델 검증 범위·월 비용 (이전 조사 기록): [MODEL_COST_AND_VALIDATION.md](docs/MODEL_COST_AND_VALIDATION.md)
 - 누적 2만 원 자동 중지: [AI_BUDGET.md](docs/AI_BUDGET.md)
-- 배포 후 변환 실패 조사·같은 저가 모델 연결 대안: [DEPLOYED_CONVERSION_RECOVERY.md](docs/DEPLOYED_CONVERSION_RECOVERY.md)
+- 이전 Meta 배포 실패 조사 기록: [DEPLOYED_CONVERSION_RECOVERY.md](docs/DEPLOYED_CONVERSION_RECOVERY.md)
 - 푸시 전 코드 검토·검증 기록: [CODE_REVIEW.md](docs/CODE_REVIEW.md)
 
-2026-09-28 운영자 승인 후 진단 버전 `a9eb21c`를 Vercel Production에 배포했습니다. 로컬 **Meta Contributor 실제 코드 생성 3회 성공**을 확인했지만, 배포 서버의 승인받은 변환 1회는 `404 / model_not_found`로 실패했습니다. 서버의 키 변수·키·공급자 코드는 로컬과 같지만 모델 목록은 로컬 8개·서울 서버 4개이며, 서버의 1.3 Contributor 개별 조회도 404입니다. **배포 서버의 모델 접근 문제·심층 보안검사·Meta 과금 표시 불일치 확인은 미완료**입니다. [추가 진단 결과·지역 비교와 대안](docs/DEPLOYED_CONVERSION_RECOVERY.md)을 참고하세요. 함수 지역 변경은 별도 배포 승인을 기다립니다. `vercel.json`의 `git.deploymentEnabled=false`로 Git 푸시에 따른 자동 배포를 차단하며, 후속 재배포와 추가 실제 AI 요청은 각각 운영자 승인을 받습니다.
+2026-09-28 OpenAI 전환 코드와 배포 명령을 준비했습니다. 사용자가 배포 명령을 실행했고 운영 홈페이지·상태 API의 HTTP 200 및 GPT 설정·공급자 소스 해시 일치를 확인했습니다. 이번 배포 확인에서 유료 AI 생성은 실행하지 않았습니다. 운영 DB의 OpenAI 예산 업그레이드는 적용했고 기존 누적 52원·13건을 보존했습니다. 운영 사이트는 OpenAI 배포본이며, 이전 Meta 과금 표시·모델 접근 조사 기록은 [META_BILLING_INVESTIGATION.md](docs/META_BILLING_INVESTIGATION.md)와 [DEPLOYED_CONVERSION_RECOVERY.md](docs/DEPLOYED_CONVERSION_RECOVERY.md)에 있습니다. `git.deploymentEnabled=false`로 Git 푸시만으로는 배포하지 않습니다.
 
 ## 회원 이용 흐름
 
@@ -34,11 +37,11 @@ AI는 **Muse Spark 1.3 Contributor**로 고정했습니다. 변환 규칙을 담
 - 대기 확인은 5초 간격이며 AI 호출 없음; 대기·변환 중 화면을 열어 두세요
 - 동일 요청 ID는 24시간 이내 저장된 결과를 재사용
 - 제한은 PostgreSQL에서 원자적으로 적용; 실패한 시도도 사용 횟수에 포함
-- 실제 Muse 시도 전에 보수적으로 4원씩 누적 예약하고 20,000원에서 자동 중지; 실패·월 변경·회원 삭제로 초기화하지 않음
+- OpenAI 시도 전에 보수적으로 34원씩 누적 예약하고 20,000원에서 자동 중지; 실패·월 변경·회원 삭제로 초기화하지 않음
 
-누적 금액은 공식 단가를 기준으로 여유를 둔 앱 내부 계산입니다. 현재 Meta 화면의 $0.50과 토큰 단가 계산 $0.0003699가 불일치하며 실제 청구액은 미확정입니다. 실제 카드 청구액·다른 앱 호출·호스팅 비용까지 제한하지 않습니다. [계산과 적용 범위](docs/AI_BUDGET.md)를 확인하세요.
+누적 금액은 앱 내부의 보수적 예약액입니다. 실제 공급자 청구서·다른 앱 호출·호스팅 비용까지 제한하지 않습니다. [새 비용 정책](docs/OPENAI_DEPLOYMENT.md#비용-정책)을 확인하세요.
 
-Contributor는 입력과 응답을 Meta의 모델 학습에 사용하는 조건이 있습니다. 변환 화면에 안내하며, 승인된 일반 회원은 로그인 시 동의 체크박스가 기본 선택됩니다. 회원이 체크를 해제하면 실제 모델을 호출하지 않습니다. [Meta 조건·요금](https://dev.meta.ai/docs/pricing-rate-limits), [Vercel 모델](https://vercel.com/ai-gateway/models/muse-spark-1.3-contributor).
+Meta·Vercel AI Gateway 연결 코드와 Contributor 동의 화면·필드를 제거했습니다. OpenAI 키가 없으면 실제 변환이 중단됩니다. 과거 비용 조사와 DB 예약 원장은 보존합니다. 사용자 요청에 따른 GPT 집계 초기화는 [AI_BUDGET.md](docs/AI_BUDGET.md)에 설명합니다.
 
 ## 로컬 실행
 
@@ -64,4 +67,4 @@ PASS는 내부 변환 검사 통과입니다. 전략의 수익성이나 BRAIN �
 
 기본 설정: FASTEXPR / EQUITY / USA / TOP3000 / Delay 1 / Neutralization SUBINDUSTRY / Decay 4 / Truncation 0.08 / Pasteurization ON / Unit Handling VERIFY / NaN Handling OFF / Test Period 0 years·0 months. 명시한 설정을 우선하고 빠진 값만 기본값으로 채웁니다.
 
-`gateway/`와 Cloud Run 관련 파일은 이전 배포 방식의 기록입니다. 새 회원 사이트 설정에는 사용하지 않습니다.
+2026-09-28 유지보수 정리에서 이전 Cloudflare·Cloud Run 코드와 배포 파일을 제거했습니다. 현재 모듈 구조는 [ARCHITECTURE.md](docs/ARCHITECTURE.md), 개발 규칙은 [CONTRIBUTING.md](CONTRIBUTING.md)를 따릅니다. 추론 수준은 [openai_policy.py](backend/app/openai_policy.py)의 `OPENAI_POLICY.reasoning_effort`에서 `none`로 고정합니다.

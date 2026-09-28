@@ -1,10 +1,11 @@
 import pytest
 
 from backend.app.compiler import compile_fe, source_guards, validate_compiled_fe
+from backend.app.mock_provider import MockSemanticProvider
 from backend.app.models import ConvertRequest
-from backend.app.provider import MockSemanticProvider, ProviderResult
+from backend.app.provider_types import ProviderResult
 from backend.app.service import HarnessService
-from backend.tests.test_compiler import example_ir
+from backend.tests.provider_fixtures import example_ir
 
 
 def test_raw_return_reversal_is_valid():

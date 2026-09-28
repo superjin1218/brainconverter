@@ -1,26 +1,7 @@
 import pytest
 
 from backend.app.compiler import compile_fe, source_guards, validate_compiled_fe
-from backend.app.models import EntryIR, SignalIR, StrategyIR
-
-
-def example_ir() -> StrategyIR:
-    return StrategyIR(
-        status="ok",
-        signal=SignalIR(
-            field="close", operation="delta", window=5, direction="down", selection="relative"
-        ),
-        entry=EntryIR(
-            enabled=True,
-            field="volume",
-            reference="ts_mean",
-            window=20,
-            comparator=">=",
-            multiplier=1.5,
-        ),
-        neutralization="industry",
-        exit="none",
-    )
+from backend.tests.provider_fixtures import example_ir
 
 
 def test_compile_preserves_strategy_without_double_neutralization():
