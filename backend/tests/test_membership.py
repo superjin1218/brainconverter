@@ -480,33 +480,40 @@ def test_budget_stop_or_unavailable_ledger_prevents_any_paid_call(site, budget, 
 
 
 @pytest.mark.parametrize("accept", ["application/json", "text/html"])
+@pytest.mark.parametrize("details", [False, True])
 def test_provider_check_is_admin_only_and_never_reserves_usage_or_calls_inference(
-    site, monkeypatch, accept
+    site, monkeypatch, accept, details
 ):
     client, state, _ = site
     client.headers["accept"] = accept
     monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
     metadata_calls = []
     fake_ai_key = "private-fake-meta-key-never-a-real-key"
+    path = "/api/admin/provider-check" + ("?details=true" if details else "")
 
     def handler(request):
         metadata_calls.append(request)
         assert request.method == "GET"
-        assert str(request.url) == "https://api.meta.ai/v1/models"
         assert not request.content
+        if len(metadata_calls) == 2:
+            assert str(request.url) == (
+                "https://api.meta.ai/v1/models/muse-spark-1.3-contributor"
+            )
+            return httpx.Response(200, json={"id": "muse-spark-1.3-contributor"})
+        assert str(request.url) == "https://api.meta.ai/v1/models"
         return httpx.Response(200, json={"data": [{"id": "muse-spark-1.3-contributor"}]})
 
     provider = MuseSparkProvider(httpx.MockTransport(handler), api_key=fake_ai_key)
     client.app.state.harness_service = HarnessService(provider)
-    assert client.get("/api/admin/provider-check").status_code == 401
+    assert client.get(path).status_code == 401
     connect(client)
     state["status"] = "approved"
-    assert client.get("/api/admin/provider-check").status_code == 403
+    assert client.get(path).status_code == 403
     state.update(status="pending", role="admin")
-    assert client.get("/api/admin/provider-check").status_code == 403
+    assert client.get(path).status_code == 403
     assert metadata_calls == []
     state["status"] = "approved"
-    response = client.get("/api/admin/provider-check")
+    response = client.get(path)
     assert response.status_code == 200
     if accept == "text/html":
         assert response.headers["content-type"].startswith("text/html")
@@ -518,19 +525,22 @@ def test_provider_check_is_admin_only_and_never_reserves_usage_or_calls_inferenc
     else:
         assert response.json()["modelAvailable"] is True
         assert response.json()["inferencePerformed"] is False
+        assert response.json()["keyVariable"] == "explicit"
+        if details:
+            assert response.json()["selectedModel"]["modelAvailable"] is True
         fingerprint = response.json()["keyFingerprint"]
         assert len(fingerprint) == 16 and set(fingerprint) <= set("0123456789abcdef")
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["x-frame-options"] == "DENY"
     assert "script-src 'self'" in response.headers["content-security-policy"]
-    assert len(metadata_calls) == 1
+    assert len(metadata_calls) == (2 if details else 1)
     assert state["aiCalls"] == 0
     assert not any("brain_reserve" in path or "budget" in path for path, _ in state["calls"])
     for value in (fake_ai_key, ACCESS, REFRESH, SECRET, PASSWORD):
         assert value not in response.text
     state["status"] = "suspended"
-    assert client.get("/api/admin/provider-check").status_code == 403
-    assert len(metadata_calls) == 1
+    assert client.get(path).status_code == 403
+    assert len(metadata_calls) == (2 if details else 1)
 
 
 def test_provider_diagnostic_html_escapes_values():
@@ -540,6 +550,24 @@ def test_provider_diagnostic_html_escapes_values():
     assert "<script>" not in report
     assert "&lt;script&gt;" in report
     assert "&lt;/script&gt;" in report
+
+
+def test_diagnostic_runtime_never_reflects_untrusted_environment_values(monkeypatch):
+    import json
+
+    from backend.app.provider_diagnostics import diagnostic_runtime
+
+    for name in ("VERCEL_REGION", "VERCEL_GIT_COMMIT_SHA", "HTTPS_PROXY"):
+        monkeypatch.setenv(name, SECRET)
+    result = diagnostic_runtime()
+    assert result["region"] is None and result["commit"] is None
+    assert result["proxyConfigured"] is True
+    assert len(result["providerSourceSha256"]) == 64
+    assert SECRET not in json.dumps(result)
+    monkeypatch.setenv("VERCEL_REGION", "icn1")
+    monkeypatch.setenv("VERCEL_GIT_COMMIT_SHA", "a" * 40)
+    result = diagnostic_runtime()
+    assert result["region"] == "icn1" and result["commit"] == "a" * 40
 
 
 def test_budget_endpoint_requires_admin_and_never_returns_credentials(site):

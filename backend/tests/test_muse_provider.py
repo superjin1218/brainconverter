@@ -171,6 +171,10 @@ async def test_meta_connection_check_reads_catalog_once_without_inference(monkey
     assert result["inferencePerformed"] is False
     assert result["modelAvailable"] is available
     assert result["status"] == ("ok" if available else "failed")
+    assert result["catalogModelCount"] == 1
+    assert result["recognizedModelIds"] == [
+        META_MUSE_MODEL if available else "muse-spark-1.3"
+    ]
     assert FAKE_KEY not in json.dumps(result)
 
 
@@ -213,3 +217,63 @@ async def test_gateway_catalog_check_never_switches_provider_or_calls_ai():
                                 api_key=FAKE_KEY)
     assert (await provider.check_connection())["status"] == "unavailable"
     assert calls == []
+
+
+@pytest.mark.parametrize("status", [200, 404, 403, 503])
+async def test_detailed_meta_check_only_reads_two_fixed_resources(monkeypatch, status):
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        assert request.method == "GET" and not request.content
+        assert request.headers["authorization"] == f"Bearer {FAKE_KEY}"
+        if len(calls) == 1:
+            return httpx.Response(200, json={"data": [
+                {"id": "muse-spark-1.3"}, {"id": FAKE_KEY},
+            ]})
+        return httpx.Response(status, json=(
+            {"id": META_MUSE_MODEL} if status == 200 else
+            {"error": {"code": "model_not_found", "message": FAKE_KEY}}
+        ))
+
+    provider = MuseSparkProvider(httpx.MockTransport(handler), api_key=FAKE_KEY)
+    result = await provider.check_connection(details=True)
+    assert calls == [
+        "https://api.meta.ai/v1/models",
+        f"https://api.meta.ai/v1/models/{META_MUSE_MODEL}",
+    ]
+    assert result["inferencePerformed"] is False
+    assert result["modelAvailable"] is False
+    assert result["catalogModelCount"] == 2
+    assert result["unrecognizedModelCount"] == 1
+    assert result["recognizedModelIds"] == ["muse-spark-1.3"]
+    assert result["selectedModel"]["httpStatus"] == status
+    assert result["selectedModel"]["status"] == ("ok" if status == 200 else "failed")
+    assert FAKE_KEY not in json.dumps(result)
+
+
+@pytest.mark.parametrize("response", [
+    httpx.Response(200, content="invalid JSON"),
+    httpx.Response(200, json={"id": "muse-spark-1.3"}),
+    httpx.Response(200, json={"id": FAKE_KEY}),
+])
+async def test_selected_model_metadata_must_match_fixed_model(monkeypatch, response):
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    provider = MuseSparkProvider(httpx.MockTransport(lambda _: response), api_key=FAKE_KEY)
+    result = await provider._check_selected_model()
+    assert result["errorCode"] == "invalid_response"
+    assert FAKE_KEY not in json.dumps(result)
+
+
+def test_key_variable_name_matches_priority_and_trimming(monkeypatch):
+    monkeypatch.setenv("MUSE_API_PROVIDER", "meta")
+    monkeypatch.setenv("META_API_KEY", "  preferred-fake-meta-key  ")
+    monkeypatch.setenv("AI_API_KEY", "old-fake-key")
+    provider = MuseSparkProvider()
+    assert provider.key_source == "META_API_KEY"
+    assert provider.api_key == "preferred-fake-meta-key"
+    monkeypatch.setenv("META_API_KEY", "  ")
+    provider = MuseSparkProvider()
+    assert provider.key_source == "AI_API_KEY"
+    assert provider.api_key == "old-fake-key"

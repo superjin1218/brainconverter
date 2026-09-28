@@ -2,6 +2,10 @@
 
 2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. 승인받은 진단 버전 `2ed26fa`가 Vercel Production에 Ready 상태로 배포됐습니다. 로컬과 서버의 키 비교 ID는 동일하지만 서버의 Meta 모델 목록에는 Contributor가 없습니다. 추가 승인받은 실제 변환 1회도 Meta의 `404 / model_not_found`로 실패했습니다. 배포 서버의 모델 접근 문제는 아직 해결되지 않았으며 [문의용 진단 자료](META_SERVER_MODEL_ACCESS_REPORT.md)를 준비했습니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
 
+추가 진단 변경은 아직 운영에 배포하지 않았습니다. 관리자 상세 조회의
+`?details=true` 사용법과 같은 Contributor 모델의 다른 연결 방안은
+[배포 변환 복구 기록](DEPLOYED_CONVERSION_RECOVERY.md)을 확인하세요.
+
 ## 1. Supabase DB 적용
 
 대상 프로젝트: [Q-Lab BRAIN Alpha Harness](https://supabase.com/dashboard/project/sogpsiheygdwmhdlizvy). 다른 프로젝트에는 적용하지 않습니다.

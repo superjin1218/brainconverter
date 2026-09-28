@@ -16,7 +16,7 @@ from .local_provider import local_provider_router, require_local_conversion
 from .membership import ACCESS_COOKIE, MembershipService, auth_router, same_origin
 from .models import ConversionResponse, ConvertRequest
 from .provider import MUSE_MODEL, MuseSparkProvider, SemanticProvider, build_provider, muse_api_key
-from .provider_diagnostics import diagnostic_html
+from .provider_diagnostics import diagnostic_html, diagnostic_runtime
 from .security import BodyLimitMiddleware, GatewayVerifier
 from .service import HarnessService
 
@@ -272,7 +272,7 @@ def create_app(
         return await membership.rpc("brain_budget_status", request.cookies[ACCESS_COOKIE])
 
     @application.get("/api/admin/provider-check")
-    async def provider_check(request: Request):
+    async def provider_check(request: Request, details: bool = False):
         if resolved_config.auth_mode != "supabase":
             raise HTTPException(404)
         await membership.identify(request, admin=True)
@@ -282,10 +282,12 @@ def create_app(
             raise HTTPException(503, "서버의 AI 연결 설정을 확인하세요.") from None
         if not isinstance(provider, MuseSparkProvider):
             raise HTTPException(503, "Muse 연결 진단을 사용할 수 없습니다.")
-        result = await provider.check_connection()
+        result = await provider.check_connection(details=details)
         # A high-entropy API key cannot be recovered from this short comparison ID.
         # It is returned only after the approved-admin check, never in public status or logs.
         result["keyFingerprint"] = hashlib.sha256(provider.api_key.encode()).hexdigest()[:16]
+        result["keyVariable"] = provider.key_source
+        result["runtime"] = diagnostic_runtime()
         if "text/html" in request.headers.get("accept", "").lower():
             return HTMLResponse(diagnostic_html(result))
         return result

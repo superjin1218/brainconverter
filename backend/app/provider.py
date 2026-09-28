@@ -38,18 +38,23 @@ def muse_api_provider() -> str:
     return provider
 
 
-def muse_api_key() -> str:
-    """Resolve server credentials without exposing them to the browser."""
+def muse_api_key_name() -> str | None:
+    """Identify the selected variable without returning its credential."""
     names = (
         ("META_API_KEY", "AI_API_KEY")
         if muse_api_provider() == "meta"
         else ("AI_GATEWAY_API_KEY", "AI_API_KEY", "VERCEL_OIDC_TOKEN")
     )
     for name in names:
-        value = os.getenv(name, "").strip()
-        if value:
-            return value
-    return ""
+        if os.getenv(name, "").strip():
+            return name
+    return None
+
+
+def muse_api_key() -> str:
+    """Resolve server credentials without exposing them to the browser."""
+    name = muse_api_key_name()
+    return os.getenv(name, "").strip() if name else ""
 
 
 def strict_schema() -> dict:
@@ -203,6 +208,7 @@ class MuseSparkProvider(OpenAIChatProvider):
         self, transport: httpx.AsyncBaseTransport | None = None, *, api_key: str | None = None
     ) -> None:
         self.api_provider = muse_api_provider()
+        self.key_source = "explicit" if api_key is not None else muse_api_key_name()
         key = api_key if api_key is not None else muse_api_key()
         if not key.strip():
             raise RuntimeError(
@@ -233,7 +239,7 @@ class MuseSparkProvider(OpenAIChatProvider):
         if data.get("model") not in {None, MUSE_MODEL, "muse-spark-1.3-contributor"}:
             raise ProviderError("model_access")
 
-    async def check_connection(self) -> dict:
+    async def check_connection(self, *, details: bool = False) -> dict:
         """Read model availability only; never send a prompt or reserve conversion usage."""
         result = {
             "apiProvider": self.api_provider,
@@ -260,11 +266,25 @@ class MuseSparkProvider(OpenAIChatProvider):
             ):
                 raise ProviderError("invalid_response")
             available = any(item["id"] == self.model for item in models)
-            return {
+            # Only public, explicitly known IDs may be reflected. An upstream body
+            # could contain credentials or arbitrary text even when its shape is valid.
+            known_ids = {
+                "sam-3.1", "muse-image-1.0", "muse-voice-transcribe-1.0",
+                "muse-spark-1.1", "muse-spark-1.2", "muse-spark-1.2-contributor",
+                "muse-spark-1.3", META_MUSE_MODEL,
+            }
+            known_ids |= {f"meta/{model}" for model in known_ids}
+            recognized = sorted({item["id"] for item in models if item["id"] in known_ids})
+            report = {
                 **result, "status": "ok" if available else "failed",
                 "httpStatus": http_status, "modelAvailable": available,
                 "errorCode": None if available else "model_access",
+                "catalogModelCount": len(models), "recognizedModelIds": recognized,
+                "unrecognizedModelCount": sum(item["id"] not in known_ids for item in models),
             }
+            if details:
+                report["selectedModel"] = await self._check_selected_model()
+            return report
         except httpx.TimeoutException:
             failure = ProviderError("timeout")
         except httpx.HTTPError:
@@ -275,6 +295,36 @@ class MuseSparkProvider(OpenAIChatProvider):
             failure = exc
         return {
             **result, "status": "failed", "httpStatus": http_status,
+            "errorCode": failure.code, "upstreamCode": failure.upstream_code,
+            "responseShape": failure.response_shape,
+        }
+
+    async def _check_selected_model(self) -> dict:
+        """Retrieve the fixed Contributor resource; no user-controlled URL or prompt."""
+        http_status = None
+        try:
+            async with httpx.AsyncClient(timeout=5, transport=self.transport) as client:
+                response = await client.get(
+                    f"https://api.meta.ai/v1/models/{META_MUSE_MODEL}",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+            http_status = response.status_code
+            if response.is_error:
+                raise http_provider_error(response)
+            data = response.json()
+            if not isinstance(data, dict) or data.get("id") != META_MUSE_MODEL:
+                raise ProviderError("invalid_response")
+            return {"status": "ok", "httpStatus": http_status, "modelAvailable": True}
+        except httpx.TimeoutException:
+            failure = ProviderError("timeout")
+        except httpx.HTTPError:
+            failure = ProviderError("connection")
+        except ValueError:
+            failure = ProviderError("invalid_response")
+        except ProviderError as exc:
+            failure = exc
+        return {
+            "status": "failed", "httpStatus": http_status,
             "errorCode": failure.code, "upstreamCode": failure.upstream_code,
             "responseShape": failure.response_shape,
         }

@@ -11,6 +11,7 @@ AI는 **Muse Spark 1.3 Contributor**로 고정했습니다. 변환 규칙을 담
 - 완료한 검증과 아직 남은 작업: [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)
 - 모델 검증 범위·월 1,000회 비용: [MODEL_COST_AND_VALIDATION.md](docs/MODEL_COST_AND_VALIDATION.md)
 - 누적 2만 원 자동 중지: [AI_BUDGET.md](docs/AI_BUDGET.md)
+- 배포 후 변환 실패 조사·같은 저가 모델 연결 대안: [DEPLOYED_CONVERSION_RECOVERY.md](docs/DEPLOYED_CONVERSION_RECOVERY.md)
 - 푸시 전 코드 검토·검증 기록: [CODE_REVIEW.md](docs/CODE_REVIEW.md)
 
 2026-09-28 운영자 승인 후 진단 버전 `2ed26fa`를 Vercel Production에 배포했습니다. 로컬 **Meta Contributor 실제 코드 생성 3회 성공**을 확인했지만, 배포 서버의 승인받은 변환 1회는 `404 / model_not_found`로 실패했습니다. 서버와 로컬 키는 같고 서버 모델 목록에서만 Contributor가 누락됩니다. **배포 서버의 모델 접근 문제·심층 보안검사·Meta 과금 표시 불일치 확인은 미완료**입니다. [배포 진단과 문의 초안](docs/META_SERVER_MODEL_ACCESS_REPORT.md)을 참고하세요. `vercel.json`의 `git.deploymentEnabled=false`로 Git 푸시에 따른 자동 배포를 차단하며, 후속 재배포와 추가 실제 AI 요청은 각각 운영자 승인을 받습니다.
