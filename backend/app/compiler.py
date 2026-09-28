@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from decimal import Decimal
 
+from .hypotheses import hypothesis_context
 from .models import EntryIR, SignalIR, StrategyIR
 
 
@@ -10,11 +11,16 @@ def _format_number(value: float) -> str:
     return str(int(value)) if value.is_integer() else str(value)
 
 
-def compile_signal(signal: SignalIR) -> str:
+def signal_base(signal: SignalIR) -> str:
     if signal.operation == "delta":
-        expression = f"ts_delta({signal.field}, {signal.window})"
-    else:
-        expression = signal.field
+        return f"ts_delta({signal.field}, {signal.window})"
+    if signal.operation == "return":
+        return f"(close / ts_delay(close, {signal.window}) - 1)"
+    return signal.field
+
+
+def compile_signal(signal: SignalIR) -> str:
+    expression = signal_base(signal)
 
     if signal.direction == "down":
         expression = f"-{expression}"
@@ -44,7 +50,8 @@ def compile_fe(ir: StrategyIR) -> str:
 
 
 def source_guards(strategy: str, ir: StrategyIR) -> list[str]:
-    lower = strategy.lower()
+    context = hypothesis_context(strategy)
+    lower = context.normalized.lower()
     errors: list[str] = []
 
     neutralization_terms = {
@@ -71,7 +78,7 @@ def source_guards(strategy: str, ir: StrategyIR) -> list[str]:
         "biggest drop",
         "largest drop",
     )
-    if any(phrase in lower for phrase in downside_phrases):
+    if not context.family and any(phrase in lower for phrase in downside_phrases):
         if ir.signal.direction != "down" or ir.signal.selection != "relative":
             errors.append("상대적 하락 신호의 방향 또는 선택 방식이 보존되지 않았습니다.")
 
@@ -90,15 +97,18 @@ def source_guards(strategy: str, ir: StrategyIR) -> list[str]:
         lower,
     ):
         errors.append("현재 지원 범위 밖의 데이터·신호 조합·청산 조건이 있습니다.")
+    if re.search(r"보유\s*기간|\d+\s*일(?:간)?\s*보유|hold\s+for", lower):
+        errors.append("보유 기간과 자동 청산 규칙은 현재 지원하지 않습니다.")
     if re.search(r"\d+(?:\.\d+)?\s*%|상위\s*\d+|하위\s*\d+", lower):
-        errors.append("퍼센트 수익률·임계값·상하위 개수 조건은 현재 지원하지 않습니다.")
+        errors.append("퍼센트 임계값·상하위 개수 조건은 현재 지원하지 않습니다.")
 
     # Bind explicit windows to their semantic slot, not a coincidental number in another slot.
     signal_window = re.search(
         r"(?:최근\s*)?(\d+)\s*일\s*(?:동안|간)?\s*(?:가격|종가|하락|상승)", lower
     )
     if signal_window and (
-        ir.signal.operation != "delta" or ir.signal.window != int(signal_window.group(1))
+        ir.signal.operation not in ({"return"} if context.uses_period_return else {"delta"})
+        or ir.signal.window != int(signal_window.group(1))
     ):
         errors.append("명시한 가격 변화 기간이 보존되지 않았습니다.")
     entry_window = re.search(r"(?:최근\s*)?(\d+)\s*일\s*평균", lower)
@@ -113,17 +123,31 @@ def source_guards(strategy: str, ir: StrategyIR) -> list[str]:
         errors.append("명시한 거래량 배수가 보존되지 않았습니다.")
 
     signal_text = re.split(r"거래량|volume", lower)[0] if ir.signal.field != "volume" else lower
-    if re.search(r"하락|떨어|낮은\s*수익률|수익률이\s*낮", signal_text):
+    if context.conflicting:
+        errors.append("모멘텀과 반전 방향이 함께 제시됐습니다. 원하는 방향을 선택해 주세요.")
+    if context.family:
+        if ir.signal.direction != context.direction or ir.signal.selection != "relative":
+            errors.append("가설의 모멘텀·반전 방향 또는 상대 순위가 보존되지 않았습니다.")
+        if ir.entry.enabled and not re.search(r"평균|mean|거래량|volume", lower):
+            errors.append("입력에 없는 진입 조건이 추가됐습니다.")
+    if context.uses_period_return or context.family:
+        if ir.signal.window != context.window or any(
+            window != ir.signal.window for window in context.windows
+        ):
+            errors.append("가설의 관찰 기간이 보존되지 않았습니다.")
+    if context.uses_period_return:
+        if ir.signal.operation != "return" or ir.signal.field != "close":
+            errors.append("기간 수익률은 종가 비율로 계산해야 합니다.")
+    elif context.family and ir.signal.operation != "delta":
+        errors.append("명시한 절대 가격 변화량이 보존되지 않았습니다.")
+    if not context.family and re.search(r"하락|떨어|낮은\s*수익률|수익률이\s*낮", signal_text):
         if ir.signal.direction != "down":
             errors.append("명시한 하락 방향이 보존되지 않았습니다.")
-    if re.search(r"상승|오른|오르|높은\s*수익률|수익률이\s*높", signal_text):
+    if not context.family and re.search(r"상승|오른|오르|높은\s*수익률|수익률이\s*높", signal_text):
         if ir.signal.direction != "up":
             errors.append("명시한 상승 방향이 보존되지 않았습니다.")
-    if "수익률" in signal_text and ir.signal.field != "returns":
+    if "수익률" in signal_text and not context.uses_period_return and ir.signal.field != "returns":
         errors.append("수익률 신호가 다른 데이터로 바뀌었습니다.")
-    return_window = re.search(r"(\d+)\s*일\s*(?:누적\s*)?수익률", signal_text)
-    if return_window and int(return_window.group(1)) != 1:
-        errors.append("여러 날의 누적 수익률 신호는 현재 지원하지 않습니다.")
     if re.search(r"(?:가격|종가)", signal_text) and ir.signal.field != "close":
         errors.append("가격 신호가 다른 데이터로 바뀌었습니다.")
 
@@ -132,15 +156,11 @@ def source_guards(strategy: str, ir: StrategyIR) -> list[str]:
 
 def validate_compiled_fe(strategy: str, ir: StrategyIR, expression: str) -> list[str]:
     errors: list[str] = []
-    if ir.signal.operation == "delta":
-        expected = f"ts_delta({ir.signal.field}, {ir.signal.window})"
+    if ir.signal.operation in {"delta", "return"}:
+        expected = signal_base(ir.signal)
         if expected not in expression:
             errors.append("시계열 변화 신호가 컴파일 결과에서 사라졌습니다.")
-    base_signal = (
-        f"ts_delta({ir.signal.field}, {ir.signal.window})"
-        if ir.signal.operation == "delta"
-        else ir.signal.field
-    )
+    base_signal = signal_base(ir.signal)
     if ir.signal.direction == "down" and f"-{base_signal}" not in expression:
         errors.append("하락 방향이 컴파일 결과에서 사라졌습니다.")
     if ir.signal.selection == "relative" and "rank(" not in expression:
@@ -155,7 +175,7 @@ def validate_compiled_fe(strategy: str, ir: StrategyIR, expression: str) -> list
         r"(?:test\s*period|테스트\s*기간)\s*[:=]?\s*\d+\s*(?:년|y(?:ears?)?)"
         r"(?:\s*\d+\s*(?:개월|m(?:onths?)?))?)",
         "",
-        strategy,
+        hypothesis_context(strategy).normalized,
     )
     numbers = {Decimal(n) for n in re.findall(r"(?<![\w.])\d+(?:\.\d+)?", expression)}
     for number in re.findall(r"(?<![\d.])\d+(?:\.\d+)?", strategy_without_settings):

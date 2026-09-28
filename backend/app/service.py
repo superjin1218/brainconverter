@@ -9,6 +9,7 @@ from .models import ConversionResponse, ConvertRequest, ValidationSummary
 from .prompts import BASE_SYSTEM_PROMPT
 from .provider_types import SemanticProvider
 from .settings import resolve_simulation_settings
+from .strategy_guidance import strategy_guidance
 
 
 class HarnessService:
@@ -72,4 +73,5 @@ class HarnessService:
                 "costMicrousd": result.cost_microusd,
             },
             intentMapping=intent_mapping(ir) if status == "PASS" else [],
+            **(strategy_guidance(request.strategy, ir, settings) if status == "PASS" else {}),
         )

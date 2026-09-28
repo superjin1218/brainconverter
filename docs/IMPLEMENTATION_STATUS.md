@@ -39,7 +39,7 @@
 - 기준 코드 `351475f`까지 GitHub main에 저장했습니다. 일반 회원의 설정·키 입력·남은 횟수 표시는 숨기고, Contributor 동의는 기본 선택합니다. 회원이 체크를 해제하면 실제 변환을 차단하며 상태 조회만으로 다시 체크하지 않습니다.
 - 현재 회원 발급 방식은 운영자가 Supabase에서 이메일·비밀번호를 지정하고 Auto confirm user로 생성한 뒤 사이트에서 승인하는 방식입니다. 해당 방식에 가입용 SMTP는 필요하지 않습니다. 직접 회원가입 기능은 남아 있습니다.
 - 앞선 운영자 실험 2회와 일반 회원의 1회를 합쳐 Meta Contributor 실제 코드 생성 요청 3회가 성공했습니다. 폭넓은 자연어 정확도·실제 모델 동시 20건 부하·BRAIN Simulate는 미검증입니다.
-- 해당 코드의 [GitHub CI](https://github.com/blockcoder-sj/natural-language-brain-alpha-harness/actions/runs/36321055887)에서 Python+SQL 293개, 프런트 23개, 이전 Gateway 10개와 정적 검사가 통과했습니다. 이번 검토의 추가 유료 AI 호출은 0회입니다.
+- 해당 코드의 [GitHub CI](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/actions/runs/36321055887)에서 Python+SQL 293개, 프런트 23개, 이전 Gateway 10개와 정적 검사가 통과했습니다. 이번 검토의 추가 유료 AI 호출은 0회입니다.
 - **배포 전 미완료:** Codex Security 심층검사와 발견 문제의 수정·재검증, Meta 비용 표시 불일치 확인. 원화 결제 계정이지만 $0.50 표시가 실제 달러 청구액인지 확정하지 못했습니다. [과금 확인 기록](MODEL_COST_AND_VALIDATION.md).
 - 심층검사는 관리형 권한으로 전환한 뒤에도 `the parent must provide a managed filesystem permission profile` 오류로 시작되지 않았습니다. scanId와 심층검사 완료 보고서는 없습니다. 새 세션에서 실행 가능 여부를 확인해야 합니다.
 - `git.deploymentEnabled=false`와 이전 Cloud Run 배포 workflow 비활성화를 유지합니다. 배포는 미실행이며 직전 승인이 필요합니다. 승인 후 배포한 실제 주소에서 로그인·승인·미승인 접근 차단·변환을 최종 확인합니다.

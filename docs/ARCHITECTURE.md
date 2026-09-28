@@ -1,4 +1,4 @@
-# 현재 구조 (2026-09-28)
+# 현재 구조 (2026-09-29)
 
 브라우저 → Vercel FastAPI → Supabase 신원·승인 확인 → 작업/예산 예약 → OpenAI GPT 1회 → Python 검사·컴파일 → FASTEXPR + 12개 설정.
 
@@ -13,6 +13,10 @@
 ## 해석과 생성
 
 `backend/app/skills/brain-strategy/SKILL.md`의 본문이 모델 시스템 지침입니다. 모델은 StrategyIR JSON을 반환하며 `service.py`가 원문 조건을 검사하고 `compiler.py`가 최종 FASTEXPR을 생성합니다. confidence는 기존 응답과의 호환성을 위한 null 필드입니다.
+
+`hypotheses.py`는 모멘텀·반전 가설, 관찰 기간, 주/월 환산과 기본값 규칙을 검사합니다. `SignalIR.operation=return`은 종가 비율로 기간 수익률을 계산하며 기존 절대 변화량 `delta`와 구분합니다. 검증을 통과한 IR에서 `strategy_guidance.py`가 자연어 설명·가정·개선 실험·수정 선택지를 생성합니다. 이 단계에는 추가 모델 호출이 없습니다. 실패 결과에는 성공한 전략처럼 보이는 설명이나 제안을 붙이지 않습니다.
+
+`view.js`의 수정 선택지는 `form.js`의 입력과 설정만 갱신합니다. 사용자가 다시 변환할 때 새 요청이 발생하며, 화면에는 기존 결과가 변경 전 전략임을 표시합니다. 폼에 노출되지 않는 Test Period·NaN 설정 등도 보존하고 로그아웃 시 초안과 함께 삭제합니다. 기존 DB 캐시에는 새 응답 필드가 없어도 기본 빈 값으로 읽을 수 있습니다.
 
 ## 인증과 권한
 

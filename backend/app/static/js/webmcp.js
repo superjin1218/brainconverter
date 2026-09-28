@@ -23,8 +23,11 @@ export function registerConversionTool({form, convert}) {
         fastExpression: result.fastExpression,
         simulationSettings: result.simulationSettings,
         warnings: result.warnings,
+        strategyExplanation: result.strategyExplanation,
+        assumptions: result.assumptions,
+        improvementSuggestions: result.improvementSuggestions,
+        refinementOptions: result.refinementOptions,
       };
     },
   }, {signal: lifecycle.signal})).catch(() => {});
 }
-

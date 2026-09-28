@@ -42,6 +42,7 @@ class HarnessDashboard {
   }
 
   start() {
+    this.view.onRefine((option, settings) => this.form.applyRefinement(option, settings));
     this.form.onSubmit(payload => this.convert(payload).catch(() => undefined));
     registerConversionTool({form: this.form, convert: payload => this.convert(payload)});
     this.providerReady = this.localProvider.start();

@@ -14,6 +14,7 @@ export class StrategyForm {
     this.strategyInput = strategyInput;
     this.charCount = charCount;
     this.submitButton = submitButton;
+    this.refinementSettings = null;
     this.strategyInput.addEventListener("input", () => this.updateCount());
     this.updateCount();
   }
@@ -27,10 +28,13 @@ export class StrategyForm {
 
   payload() {
     const formData = new FormData(this.form);
-    const settings = {};
+    const settings = {...(this.refinementSettings || {})};
     for (const key of SETTINGS_FIELDS) {
       const value = formData.get(key);
-      if (value === "" || value == null) continue;
+      if (value === "" || value == null) {
+        delete settings[key];
+        continue;
+      }
       settings[key] = NUMERIC_FIELDS.has(key) ? Number(value) : value;
     }
     return {
@@ -45,9 +49,19 @@ export class StrategyForm {
   }
 
   clear() {
+    this.refinementSettings = null;
     this.form.reset();
     this.setStrategy("");
     for (const name of SETTINGS_FIELDS) this.form.querySelector(`[name="${name}"]`).value = "";
+  }
+
+  applyRefinement(option, settings) {
+    this.refinementSettings = {...settings};
+    this.setStrategy(option.strategy);
+    for (const name of SETTINGS_FIELDS) {
+      this.form.querySelector(`[name="${name}"]`).value = settings[name] ?? "";
+    }
+    this.strategyInput.focus();
   }
 
   setBusy(isBusy) {

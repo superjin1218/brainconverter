@@ -240,3 +240,10 @@ footer { width: min(1460px, calc(100% - 40px)); margin: 0 auto 30px; display: fl
   .account-label { display: none; }
   .member-row { align-items: flex-start; flex-direction: column; }
 }
+.refinement-options { display: flex; flex-wrap: wrap; gap: 10px; }
+.refinement-option { flex: 1 1 160px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); color: var(--text); text-align: left; cursor: pointer; }
+.refinement-option:hover, .refinement-option:focus-visible { border-color: var(--cyan); background: rgba(101, 217, 255, .1); }
+.refinement-option strong, .refinement-option span { display: block; }
+.refinement-option span { margin-top: 6px; font-size: 12px; line-height: 1.5; }
+#strategy-explanation, #strategy-assumptions, #improvement-suggestions, #refinement-block p { font-size: 13px; line-height: 1.8; }
+#improvement-suggestions li { margin: 12px 0; }

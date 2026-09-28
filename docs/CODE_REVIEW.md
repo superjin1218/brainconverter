@@ -11,7 +11,7 @@
 - Git 추적 파일 87개 중 실제 환경파일·개인 키 파일·`.vercel/`·브라우저 증빙 `artifacts/`는 포함되지 않았습니다. Git에는 비밀값이 비어 있는 환경 예시만 있습니다. 자동 Vercel 배포와 이전 Cloud Run 배포는 차단 상태입니다.
 - README와 현재 상태 문서에 남아 있던 SMTP 필수 안내·이전 실제 변환 횟수를 수동 회원 발급 방식과 요청 3회 성공으로 갱신했습니다. 과금 불일치와 심층검사 미완료 상태를 첫 화면에서 확인할 수 있도록 명시했습니다.
 
-코드 변경 없이 해당 리비전의 완료된 [CI 실행](https://github.com/blockcoder-sj/natural-language-brain-alpha-harness/actions/runs/36321055887)과 로그를 확인했습니다: Python+임시 PostgreSQL **293개**, 프런트 **23개**, 이전 Gateway **10개**, Ruff·JS 문법·TypeScript·Gateway 빌드 모두 통과. 이번 문서 갱신은 링크·상태·diff 공백을 별도 점검합니다.
+코드 변경 없이 해당 리비전의 완료된 [CI 실행](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/actions/runs/36321055887)과 로그를 확인했습니다: Python+임시 PostgreSQL **293개**, 프런트 **23개**, 이전 Gateway **10개**, Ruff·JS 문법·TypeScript·Gateway 빌드 모두 통과. 이번 문서 갱신은 링크·상태·diff 공백을 별도 점검합니다.
 
 심층 보안검사는 아직 시작되지 않았으며 전체 저장소 무취약점 판정이나 배포 승인을 내린 것은 아닙니다. Meta 청구 단위 확인, 심층검사 및 발견 문제 재검증, 배포 직전 승인과 배포 후 실제 주소 점검이 남아 있습니다. 아래 내용은 이전 시점의 검토 기록입니다.
 

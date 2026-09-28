@@ -48,6 +48,7 @@ export class DashboardView {
       "#result-mode-note", "#metric-status", "#metric-confidence", "#loading-description"]) {
       this.root.querySelector(selector).textContent = "";
     }
+    this.clearGuidance();
     for (const selector of ["#settings-grid", "#intent-mapping", "#validation-list", "#warnings-list"]) {
       this.root.querySelector(selector).replaceChildren();
     }
@@ -79,6 +80,7 @@ export class DashboardView {
     this.renderSettings(result.simulationSettings, result.settingsSource);
     this.renderValidation(result.validation);
     this.renderWarnings(result.warnings, result.unresolvedSettings);
+    this.renderGuidance(result);
     const mapping = this.root.querySelector("#intent-mapping");
     mapping.replaceChildren();
     for (const item of result.intentMapping || []) {
@@ -90,6 +92,64 @@ export class DashboardView {
     this.status.textContent = label;
     if (!passed) {
       this.status.className = "result-status error";
+    }
+  }
+
+  onRefine(handler) {
+    this.refineHandler = handler;
+  }
+
+  clearGuidance() {
+    for (const selector of ["#strategy-explanation", "#refinement-feedback"]) {
+      this.root.querySelector(selector).textContent = "";
+    }
+    for (const selector of ["#strategy-assumptions", "#improvement-suggestions", "#refinement-options"]) {
+      this.root.querySelector(selector).replaceChildren();
+    }
+    for (const selector of ["#strategy-explanation-block", "#refinement-block", "#improvements-block"]) {
+      this.root.querySelector(selector).hidden = true;
+    }
+  }
+
+  renderGuidance(result) {
+    this.clearGuidance();
+    if (result.status !== "PASS") return;
+    const explanation = result.strategyExplanation;
+    this.root.querySelector("#strategy-explanation-block").hidden = !explanation;
+    this.root.querySelector("#strategy-explanation").textContent = explanation || "";
+    for (const assumption of result.assumptions || []) {
+      const row = document.createElement("li");
+      row.textContent = assumption;
+      this.root.querySelector("#strategy-assumptions").append(row);
+    }
+    const suggestions = result.improvementSuggestions || [];
+    this.root.querySelector("#improvements-block").hidden = !suggestions.length;
+    for (const suggestion of suggestions) {
+      const row = document.createElement("li");
+      const title = document.createElement("strong");
+      title.textContent = suggestion.title;
+      const detail = document.createElement("p");
+      detail.textContent = `${suggestion.rationale} ${suggestion.experiment}`;
+      row.append(title, detail);
+      this.root.querySelector("#improvement-suggestions").append(row);
+    }
+    const options = result.refinementOptions || [];
+    this.root.querySelector("#refinement-block").hidden = !options.length;
+    for (const option of options) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "refinement-option";
+      const label = document.createElement("strong");
+      label.textContent = option.label;
+      const description = document.createElement("span");
+      description.textContent = option.description;
+      button.append(label, description);
+      button.addEventListener("click", () => {
+        this.refineHandler?.(option, result.simulationSettings);
+        this.root.querySelector("#refinement-feedback").textContent =
+          `‘${option.label}’을 입력에 반영했습니다. 다시 변환하면 코드가 갱신됩니다. 현재 결과는 변경 전 전략입니다.`;
+      });
+      this.root.querySelector("#refinement-options").append(button);
     }
   }
 

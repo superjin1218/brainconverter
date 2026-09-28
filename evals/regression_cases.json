@@ -598,5 +598,29 @@
     "strategy": "최근 5일 하락 종목, Decay 999",
     "status": "REJECTED",
     "expression": null
+  },
+  {
+    "id": "case-101",
+    "strategy": "1달 기준 모멘텀 전략 만들어줘",
+    "status": "PASS",
+    "expression": "rank((close / ts_delay(close, 21) - 1))"
+  },
+  {
+    "id": "case-102",
+    "strategy": "일주일 반전추세 전략을 만들어줘",
+    "status": "PASS",
+    "expression": "rank(-(close / ts_delay(close, 5) - 1))"
+  },
+  {
+    "id": "case-103",
+    "strategy": "수익률 높은거가 떨어진다고 생각하는 거야",
+    "status": "PASS",
+    "expression": "rank(-(close / ts_delay(close, 5) - 1))"
+  },
+  {
+    "id": "case-104",
+    "strategy": "한 달 모멘텀. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래한다.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank((close / ts_delay(close, 21) - 1)), -1)"
   }
 ]

@@ -167,6 +167,50 @@ test("an explicit mock request is guarded and labelled as mock", async t => {
   assert.equal(ui.element("#result-status").textContent, "모의 변환 완료");
 });
 
+test("draft explanations render as text and choices require a new explicit conversion", async t => {
+  const ui = await dashboard(t);
+  const settings = {region: "USA", universe: "TOP500", delay: 1, neutralization: "SECTOR",
+    decay: 8, truncation: 0.04, nanHandling: "ON", testPeriod: {years: 2, months: 3}};
+  ui.control.result = {...ui.control.result, simulationSettings: settings,
+    strategyExplanation: "<script>안전한 텍스트</script> 21거래일 모멘텀 전략입니다.",
+    assumptions: ["한 달을 21거래일로 해석했습니다."],
+    improvementSuggestions: [{title: "기간 비교", rationale: "기간 민감도 확인", experiment: "5일과 21일 비교"}],
+    refinementOptions: [{label: "반전 방향", description: "낮은 수익률을 선호합니다.", strategy: "최근 21일 수익률 기준 반전 전략."}],
+  };
+  await ui.submit();
+  assert.match(ui.element("#strategy-explanation").textContent, /<script>/);
+  assert.equal(ui.element("#strategy-assumptions").children.length, 1);
+  assert.equal(ui.element("#improvement-suggestions").children.length, 1);
+  const option = ui.element("#refinement-options").children[0];
+  await option.emit("click");
+  assert.equal(ui.control.calls.length, 1);
+  assert.equal(ui.element("#strategy").value, "최근 21일 수익률 기준 반전 전략.");
+  assert.match(ui.element("#refinement-feedback").textContent, /변경 전 전략/);
+  await ui.submit();
+  assert.equal(ui.control.calls.length, 2);
+  const payload = JSON.parse(ui.control.calls[1].body);
+  assert.equal(payload.strategy, "최근 21일 수익률 기준 반전 전략.");
+  assert.deepEqual(payload.settings, settings);
+});
+
+test("old cached and rejected results clear previous explanation and choices", async t => {
+  const ui = await dashboard(t);
+  ui.control.result = {...ui.control.result, strategyExplanation: "전략 설명",
+    assumptions: ["기본 기간"],
+    refinementOptions: [{label: "변경", description: "방향 변경", strategy: "반전 전략"}],
+    improvementSuggestions: [{title: "검증", rationale: "기간 비교", experiment: "백테스트"}],
+  };
+  await ui.submit();
+  assert.equal(ui.element("#refinement-block").hidden, false);
+  ui.control.result = {status: "REJECTED", provider: "openai", simulationSettings: {},
+    settingsSource: {}, validation: {}, warnings: []};
+  await ui.submit();
+  assert.equal(ui.element("#strategy-explanation").textContent, "");
+  assert.equal(ui.element("#refinement-options").children.length, 0);
+  assert.equal(ui.element("#improvement-suggestions").children.length, 0);
+  assert.equal(ui.element("#refinement-block").hidden, true);
+});
+
 test("a response with the wrong provider cannot appear as a successful AI result", async t => {
   const ui = await dashboard(t);
   ui.control.result = {...ui.control.result, provider: "mock"};
@@ -357,13 +401,18 @@ test("logout erases private form, hidden results and administrator data", async 
   ui.element('[name="region"]').value = "USA";
   ui.control.result.warnings = ["private warning"];
   ui.control.result.intentMapping = [{requirement: "private", expression: "secret"}];
+  ui.control.result.strategyExplanation = "private explanation";
+  ui.control.result.assumptions = ["private assumption"];
+  ui.control.result.refinementOptions = [{label: "private choice", description: "private", strategy: "반전 전략"}];
+  ui.control.result.improvementSuggestions = [{title: "private improvement", rationale: "private", experiment: "private"}];
   await ui.submit();
+  await ui.element("#refinement-options").children[0].emit("click");
   ui.element("#ai-budget-status").textContent = "private budget status";
   await ui.element("#auth-logout").emit("click");
   for (const selector of ["#strategy", '[name="region"]']) assert.equal(ui.element(selector).value, "");
-  for (const selector of ["#expression-output", "#settings-copy", "#error-message", "#ai-budget-status"])
+  for (const selector of ["#expression-output", "#settings-copy", "#error-message", "#ai-budget-status", "#strategy-explanation", "#refinement-feedback"])
     assert.equal(ui.element(selector).textContent, "");
-  for (const selector of ["#intent-mapping", "#warnings-list", "#settings-grid"])
+  for (const selector of ["#intent-mapping", "#warnings-list", "#settings-grid", "#strategy-assumptions", "#refinement-options", "#improvement-suggestions"])
     assert.equal(ui.element(selector).children.length, 0);
   ui.control.member = {id: "b", status: "approved", role: "member"};
   await ui.element("#auth-refresh").emit("click");

@@ -11,7 +11,7 @@ class StrictModel(BaseModel):
 
 class SignalIR(StrictModel):
     field: Literal["open", "high", "low", "close", "volume", "returns"]
-    operation: Literal["delta", "raw"]
+    operation: Literal["delta", "raw", "return"]
     window: int = Field(ge=1, le=1000)
     direction: Literal["up", "down", "none"]
     selection: Literal["relative", "raw"]
@@ -38,6 +38,8 @@ class StrategyIR(StrictModel):
         if self.status == "ok":
             if self.signal.operation == "raw" and self.signal.window != 1:
                 raise ValueError("raw 신호는 기간을 적용하지 않습니다.")
+            if self.signal.operation == "return" and self.signal.field != "close":
+                raise ValueError("기간 수익률은 종가로 계산합니다.")
             if self.entry.enabled and (
                 self.entry.reference != "ts_mean" or self.entry.comparator == "none"
             ):
@@ -85,6 +87,18 @@ class ValidationSummary(BaseModel):
     compilePassed: bool = True
 
 
+class ImprovementSuggestion(StrictModel):
+    title: str
+    rationale: str
+    experiment: str
+
+
+class RefinementOption(StrictModel):
+    label: str
+    description: str
+    strategy: str
+
+
 class ConversionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -101,3 +115,7 @@ class ConversionResponse(BaseModel):
     provider: str
     usage: dict[str, int] = Field(default_factory=dict)
     intentMapping: list[dict[str, str]] = Field(default_factory=list)
+    strategyExplanation: str | None = None
+    assumptions: list[str] = Field(default_factory=list)
+    improvementSuggestions: list[ImprovementSuggestion] = Field(default_factory=list)
+    refinementOptions: list[RefinementOption] = Field(default_factory=list)

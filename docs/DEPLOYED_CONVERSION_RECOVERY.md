@@ -111,7 +111,7 @@ AI 요청 1회, 오류 자동 재시도 0회, 검색·도구 호출 0회, 출력
 `310 passed, 30 skipped`. `make lint` 통과. PostgreSQL 통합 검사는
 별도 CI에서 실행하며, 이번 로컬 결과의 30개 생략 항목은 통과로 세지 않습니다.
 
-진단 코드의 [GitHub CI](https://github.com/blockcoder-sj/natural-language-brain-alpha-harness/actions/runs/36364382738)에서 backend(임시 PostgreSQL 포함), frontend, gateway가 모두 통과했습니다.
+진단 코드의 [GitHub CI](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/actions/runs/36364382738)에서 backend(임시 PostgreSQL 포함), frontend, gateway가 모두 통과했습니다.
 지역 변경은 아직 배포하지 않았습니다. 현재 변환 실패가 해결됐다고
 판단하려면 운영 연결이 정상이고 새로 승인한 실제 변환 1회가 성공해야 합니다.
 

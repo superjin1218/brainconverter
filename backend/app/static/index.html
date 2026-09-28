@@ -116,16 +116,16 @@
         <div class="section-head">
           <div>
             <p class="eyebrow">STRATEGY INPUT</p>
-            <h1 id="composer-title">전략을 자연어로 적으세요</h1>
+            <h1 id="composer-title">전략 아이디어를 적으세요</h1>
           </div>
           <span class="step-badge">1 / 2</span>
         </div>
 
         <form id="strategy-form">
           <label for="strategy">자연어 전략</label>
-          <textarea id="strategy" name="strategy" maxlength="2000" required>최근 5일 동안 가격이 많이 떨어진 종목을 매수하고 싶다. 거래량이 최근 20일 평균보다 1.5배 이상일 때만 거래하고 산업별로 중립화한다.</textarea>
+          <textarea id="strategy" name="strategy" maxlength="2000" required placeholder="예: 1달 기준 모멘텀 전략 만들어줘 / 일주일 반전추세 전략 / 수익률 높은 게 떨어질 것 같아">1달 기준 모멘텀 전략 만들어줘</textarea>
           <div class="textarea-meta">
-            <span>기간·방향·조건·중립화를 구체적으로 적을수록 정확합니다.</span>
+            <span>짧은 가설도 가능합니다. 초안의 가정을 확인하고 선택지로 다듬어 보세요.</span>
             <span id="char-count">0 / 2,000</span>
           </div>
 
@@ -186,7 +186,7 @@
           <span>이 서비스는 표현식과 설정만 만들며 로그인·시뮬레이션·제출을 수행하지 않습니다.</span>
         </aside>
         <aside class="privacy-note">
-          <b>현재 지원: 가격 변화·수익률 순위·평균 거래량 조건</b>
+          <b>현재 지원: 모멘텀·반전 가설, 기간 수익률·가격 변화·평균 거래량 조건</b>
           <span>복합 신호, 재무지표, 손절·익절은 아직 지원하지 않습니다. 회원 서비스에서는 같은 요청을 24시간 동안 재사용합니다.</span>
         </aside>
 
@@ -204,7 +204,7 @@
         <div id="result-empty" class="empty-state">
           <span class="empty-symbol" aria-hidden="true">{ }</span>
           <h3>전략을 입력하면 여기에 결과가 표시됩니다</h3>
-          <p>FASTEXPR, 전체 시뮬레이션 설정과 코드 변환 점검 결과를 함께 확인할 수 있습니다.</p>
+          <p>코드와 전략 설명, 보완한 가정, 방향을 바꾸는 선택지와 개선 실험을 함께 확인할 수 있습니다.</p>
         </div>
 
         <div id="result-loading" class="loading-state" role="status" aria-live="polite" hidden>
@@ -219,10 +219,29 @@
             <code id="expression-output"></code>
           </article>
 
+          <div id="strategy-explanation-block" class="result-block" hidden>
+            <div class="block-head"><h3>어떤 전략인가요?</h3></div>
+            <p id="strategy-explanation"></p>
+            <ul id="strategy-assumptions"></ul>
+          </div>
+
           <div class="metrics">
             <div><small>변환 상태</small><b id="metric-status">—</b></div>
             <div><small>변환 방식</small><b id="metric-confidence">—</b></div>
             <div><small>SETTINGS</small><b>12 / 12</b></div>
+          </div>
+
+          <div id="refinement-block" class="result-block" hidden>
+            <div class="block-head"><h3>원하는 방향으로 다듬기</h3></div>
+            <p>선택하면 입력 전략이 바뀝니다. 내용을 확인한 뒤 ‘전략 변환하기’를 눌러 새 코드를 만드세요.</p>
+            <div id="refinement-options" class="refinement-options"></div>
+            <p id="refinement-feedback" role="status"></p>
+          </div>
+
+          <div id="improvements-block" class="result-block" hidden>
+            <div class="block-head"><h3>개선 방향과 검증 방법</h3></div>
+            <p>전략 구조에 따른 실험 제안입니다. 백테스트를 통해 개선 여부를 확인하세요.</p>
+            <ul id="improvement-suggestions"></ul>
           </div>
 
           <div class="result-block">

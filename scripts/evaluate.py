@@ -21,7 +21,7 @@ async def evaluate(args):
         from dotenv import load_dotenv
 
         load_dotenv(ROOT / ".env.local", interpolate=False)
-    limit = args.limit if args.limit is not None else 1 if args.live else 100
+    limit = args.limit if args.limit is not None else 1 if args.live else None
     cases = json.loads(args.cases.read_text())[:limit]
     service = HarnessService(OpenAIProvider() if args.live else MockSemanticProvider())
     rows = []

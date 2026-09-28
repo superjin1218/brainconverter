@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from .hypotheses import hypothesis_context
 from .models import EntryIR, SignalIR, StrategyIR
 from .provider_types import ProviderResult
 
@@ -15,22 +16,29 @@ class MockSemanticProvider:
 
     async def interpret(self, system_prompt: str, strategy: str) -> ProviderResult:
         del system_prompt
-        lower = strategy.lower()
+        context = hypothesis_context(strategy)
+        lower = context.normalized.lower()
 
         signal_field = "returns" if "수익률" in lower or "returns" in lower else "close"
         operation = "raw" if signal_field == "returns" else "delta"
-        numbers = [int(item) for item in re.findall(r"(?<!\d)\d+(?!\d)", strategy)]
+        numbers = [int(item) for item in re.findall(r"(?<!\d)\d+(?!\d)", lower)]
         signal_window = numbers[0] if numbers and operation == "delta" else 1
         downside = any(
             phrase in lower for phrase in ("떨어", "하락", "낮은", "reversal", "drop", "weak")
         )
+        if context.uses_period_return:
+            signal_field, operation = "close", "return"
+            signal_window = context.window
+        if context.direction:
+            downside = context.direction == "down"
+            signal_window = context.window
 
         entry_enabled = "거래량" in lower or "volume" in lower
         entry_window = 20
         multiplier = 1.0
         comparator = ">="
         if entry_enabled:
-            mean_match = re.search(r"(?:최근\s*)?(\d+)일\s*평균", strategy)
+            mean_match = re.search(r"(?:최근\s*)?(\d+)일\s*평균", lower)
             multiplier_match = re.search(r"(\d+(?:\.\d+)?)\s*배", strategy)
             if mean_match:
                 entry_window = int(mean_match.group(1))
@@ -52,7 +60,14 @@ class MockSemanticProvider:
             neutralization = "industry"
 
         ir = StrategyIR(
-            status="ok",
+            status="ambiguous"
+            if context.conflicting
+            or not re.search(
+                r"모멘|momentum|반전|reversal|회귀|추세|가격|종가|close|수익률|returns|"
+                r"하락|상승|떨어|오른|volume|거래량",
+                lower,
+            )
+            else "ok",
             signal=SignalIR(
                 field=signal_field,
                 operation=operation,
