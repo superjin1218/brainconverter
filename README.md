@@ -14,7 +14,7 @@ AI는 **Muse Spark 1.3 Contributor**로 고정했습니다. 변환 규칙을 담
 - 배포 후 변환 실패 조사·같은 저가 모델 연결 대안: [DEPLOYED_CONVERSION_RECOVERY.md](docs/DEPLOYED_CONVERSION_RECOVERY.md)
 - 푸시 전 코드 검토·검증 기록: [CODE_REVIEW.md](docs/CODE_REVIEW.md)
 
-2026-09-28 운영자 승인 후 진단 버전 `2ed26fa`를 Vercel Production에 배포했습니다. 로컬 **Meta Contributor 실제 코드 생성 3회 성공**을 확인했지만, 배포 서버의 승인받은 변환 1회는 `404 / model_not_found`로 실패했습니다. 서버와 로컬 키는 같고 서버 모델 목록에서만 Contributor가 누락됩니다. **배포 서버의 모델 접근 문제·심층 보안검사·Meta 과금 표시 불일치 확인은 미완료**입니다. [배포 진단과 문의 초안](docs/META_SERVER_MODEL_ACCESS_REPORT.md)을 참고하세요. `vercel.json`의 `git.deploymentEnabled=false`로 Git 푸시에 따른 자동 배포를 차단하며, 후속 재배포와 추가 실제 AI 요청은 각각 운영자 승인을 받습니다.
+2026-09-28 운영자 승인 후 진단 버전 `a9eb21c`를 Vercel Production에 배포했습니다. 로컬 **Meta Contributor 실제 코드 생성 3회 성공**을 확인했지만, 배포 서버의 승인받은 변환 1회는 `404 / model_not_found`로 실패했습니다. 서버의 키 변수·키·공급자 코드는 로컬과 같지만 모델 목록은 로컬 8개·서울 서버 4개이며, 서버의 1.3 Contributor 개별 조회도 404입니다. **배포 서버의 모델 접근 문제·심층 보안검사·Meta 과금 표시 불일치 확인은 미완료**입니다. [추가 진단 결과·지역 비교와 대안](docs/DEPLOYED_CONVERSION_RECOVERY.md)을 참고하세요. 함수 지역 변경은 별도 배포 승인을 기다립니다. `vercel.json`의 `git.deploymentEnabled=false`로 Git 푸시에 따른 자동 배포를 차단하며, 후속 재배포와 추가 실제 AI 요청은 각각 운영자 승인을 받습니다.
 
 ## 회원 이용 흐름
 

@@ -3,7 +3,7 @@
   "git": {
     "deploymentEnabled": false
   },
-  "regions": ["icn1"],
+  "regions": ["iad1"],
   "functions": {
     "app.py": {
       "maxDuration": 65,

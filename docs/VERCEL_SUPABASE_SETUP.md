@@ -1,8 +1,8 @@
 # Vercel + Supabase 회원 사이트 설정
 
-2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. 승인받은 진단 버전 `2ed26fa`가 Vercel Production에 Ready 상태로 배포됐습니다. 로컬과 서버의 키 비교 ID는 동일하지만 서버의 Meta 모델 목록에는 Contributor가 없습니다. 추가 승인받은 실제 변환 1회도 Meta의 `404 / model_not_found`로 실패했습니다. 배포 서버의 모델 접근 문제는 아직 해결되지 않았으며 [문의용 진단 자료](META_SERVER_MODEL_ACCESS_REPORT.md)를 준비했습니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
+2026-09-28 기준. **Supabase DB·운영자 로그인과 로컬 Meta Contributor 실제 변환 3건을 확인했습니다. 승인받은 진단 버전 `a9eb21c`가 Vercel Production에 Ready 상태로 배포됐습니다. 키 변수·키·공급자 코드가 로컬과 같지만 모델 목록은 로컬 8개·서버 4개이며, 서울 서버의 1.3 Contributor 개별 조회도 `404 / model_not_found`입니다. 배포 서버의 변환 문제는 아직 해결되지 않았습니다.** 운영자가 Auto confirm으로 일반 회원 계정을 발급하는 방식은 가입용 SMTP가 필요하지 않습니다. 회원 직접 가입·인증메일을 제공할 때만 Custom SMTP를 설정합니다. Google Cloud·Oracle·Cloudflare는 필요하지 않습니다.
 
-추가 진단 변경은 아직 운영에 배포하지 않았습니다. 관리자 상세 조회의
+미국 함수 지역 비교 변경은 아직 운영에 배포하지 않았습니다. 관리자 상세 조회의
 `?details=true` 사용법과 같은 Contributor 모델의 다른 연결 방안은
 [배포 변환 복구 기록](DEPLOYED_CONVERSION_RECOVERY.md)을 확인하세요.
 
@@ -45,7 +45,7 @@ Supabase Authentication에서:
 
 ## 4. Vercel 환경변수
 
-대상: [natural-language-brain-alpha-harness](https://vercel.com/ksj12/natural-language-brain-alpha-harness), FastAPI 프레임워크, 저장소 루트, Seoul(icn1), 최대 65초. 진입점은 루트 `app.py`, 설정은 `vercel.json`입니다. [Vercel FastAPI 문서](https://vercel.com/docs/frameworks/backend/fastapi).
+대상: [natural-language-brain-alpha-harness](https://vercel.com/ksj12/natural-language-brain-alpha-harness), FastAPI 프레임워크, 저장소 루트, 최대 65초. 현재 운영 함수 지역은 Seoul(icn1)이며 저장소에는 비교용 iad1 변경을 준비했습니다. 진입점은 루트 `app.py`, 설정은 `vercel.json`입니다. [Vercel FastAPI 문서](https://vercel.com/docs/frameworks/backend/fastapi).
 
 [환경변수 예시](../.env.vercel.example)를 참고하여 Production에 등록합니다. Preview를 사용할 때는 별도 테스트 Supabase·키를 사용하세요.
 
@@ -70,7 +70,7 @@ Chrome에서 `HARNESS_PROVIDER=muse`, `MUSE_MODEL=meta/muse-spark-1.3-contributo
 
 기존 Supabase 서버 키를 `SUPABASE_SECRET_KEY`라는 **Secret 유형·Production 전용** 변수로 저장했고 Vercel 성공 알림을 확인했습니다. 로컬 시험에도 기존 키를 Git에서 제외된 `.env.local`에 저장했습니다. 키를 새로 생성·회전하지 않았습니다.
 
-현재 사용자의 키는 Meta 직접 발급 키입니다. Vercel Production에 `MUSE_API_PROVIDER=meta`와 Secret `META_API_KEY`가 저장돼 있습니다. Secret 원문을 조회하지 않고 SHA-256 비교 ID로 로컬과 서버 키가 같음을 확인했습니다. 양쪽 모델 목록 조회는 200이지만 Contributor는 로컬에서만 반환됐습니다. 기존 `AI_API_KEY`는 별칭으로 지원하며 명시적인 Meta 키를 우선합니다. Meta 모드는 `META_API_KEY` → `AI_API_KEY`만 읽고 `https://api.meta.ai/v1/chat/completions`에 고정 연결합니다. 모델 식별자는 같은 Contributor 모델의 Meta 표기인 `muse-spark-1.3-contributor`로 전송합니다. [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions).
+현재 사용자의 키는 Meta 직접 발급 키입니다. Vercel Production에 `MUSE_API_PROVIDER=meta`와 Secret `META_API_KEY`가 저장돼 있습니다. Secret 원문을 조회하지 않고 SHA-256 비교 ID로 로컬과 서버 키가 같음을 확인했습니다. 양쪽 모델 목록 조회는 200이지만 1.3 Contributor는 로컬에서만 반환됐고 1.2 Contributor는 양쪽에 있습니다. 기존 `AI_API_KEY`는 별칭으로 지원하며 명시적인 Meta 키를 우선합니다. Meta 모드는 `META_API_KEY` → `AI_API_KEY`만 읽고 `https://api.meta.ai/v1/chat/completions`에 고정 연결합니다. 모델 식별자는 같은 Contributor 모델의 Meta 표기인 `muse-spark-1.3-contributor`로 전송합니다. [Meta Chat Completions](https://dev.meta.ai/docs/protocols/chat-completions).
 
 Vercel AI Gateway를 따로 선택하려면 `MUSE_API_PROVIDER=gateway`와 Vercel 발급 키를 설정합니다. 이 모드의 키 우선순위는 `AI_GATEWAY_API_KEY` → `AI_API_KEY` → `VERCEL_OIDC_TOKEN`입니다. OIDC는 Meta 직접 인증에 사용할 수 없습니다. [Vercel OIDC 안내](https://vercel.com/docs/ai-gateway/authentication-and-byok/oidc).
 

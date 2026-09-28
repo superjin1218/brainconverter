@@ -66,4 +66,4 @@ Gateway의 무료 $5 크레딧은 일부 모델에만 적용되므로 Muse가 �
 5. 배포 환경에서 미승인 회원 차단·승인 후 변환·이용 중지 후 차단·중복 요청 결과 재사용을 확인합니다.
 6. 생성된 FASTEXPR를 BRAIN에서 사용자가 직접 실행해 문법·설정 호환을 확인합니다.
 
-현재 Meta 직접 호출 3회는 성공했고, 배포·BRAIN 실행은 하지 않았습니다. 설정 절차는 [VERCEL_SUPABASE_SETUP.md](VERCEL_SUPABASE_SETUP.md)를 따릅니다.
+로컬 Meta 직접 호출 3회는 성공했습니다. 2026-09-28 진단 버전 `a9eb21c`를 Production에 배포했으나 서버의 1.3 Contributor 접근 실패는 해결되지 않았습니다. 새 키·AI 생성 없이 함수 지역을 비교하는 변경을 준비했으며 별도 배포 승인을 기다립니다. BRAIN 실행은 하지 않았습니다. [배포 상세 결과와 다음 비교](DEPLOYED_CONVERSION_RECOVERY.md), [설정 절차](VERCEL_SUPABASE_SETUP.md)를 확인하세요.
