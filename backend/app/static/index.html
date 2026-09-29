@@ -123,7 +123,7 @@
 
         <form id="strategy-form">
           <label for="strategy">자연어 전략</label>
-          <textarea id="strategy" name="strategy" maxlength="2000" required placeholder="예: 덜 출렁이는 종목이 좋을 것 같아 / 갑자기 사람들이 몰리는 주식이 궁금해 / 잘 오르면서 안정적인 주식이 좋아">덜 출렁이는 종목이 좋을 것 같아</textarea>
+          <textarea id="strategy" name="strategy" maxlength="2000" rows="10" required placeholder="예: 미국 TOP3000 주식의 최근 5일 누적 수익률(종가 기준)이 높을수록 높은 점수를 주세요.&#10;거래량이 최근 20일 평균의 1.5배 이상일 때만 점수를 갱신하고, 그 외에는 이전 점수를 유지해 주세요.&#10;산업 중립화(INDUSTRY), Delay 1, Decay 4, Truncation 0.08을 적용해 주세요."></textarea>
           <div class="textarea-meta">
             <span>아이디어만 적어도 됩니다. AI가 측정 방법과 기간을 정하고, 가정과 수정 선택지를 보여줍니다.</span>
             <span id="char-count">0 / 2,000</span>
