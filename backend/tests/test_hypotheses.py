@@ -16,7 +16,7 @@ from backend.app.prompts import BASE_SYSTEM_PROMPT
 from backend.app.provider_diagnostics import diagnostic_runtime
 from backend.app.provider_types import ProviderResult
 from backend.app.service import HarnessService
-from backend.tests.provider_fixtures import FAKE_KEY, example_ir, reply
+from backend.tests.provider_fixtures import FAKE_KEY, example_ir, intent_ir, reply
 
 
 @pytest.mark.parametrize("filename", ["hypotheses.py", "models.py", "SKILL.md"])
@@ -224,7 +224,13 @@ async def test_openai_wire_contract_stays_one_call_and_accepts_new_operation():
         calls.append(body)
         assert body["reasoning_effort"] == "none"
         assert body["max_completion_tokens"] == 1024
-        return httpx.Response(200, json=reply(content=period_ir().model_dump_json()))
+        ir = intent_ir()
+        ir.entry = None
+        ir.metrics[0].source = "수익률 높은게 계속 높을 것 같아"
+        ir.metrics[0].operation = "return"
+        ir.metrics[0].preference = "higher"
+        ir.metrics[0].window = 21
+        return httpx.Response(200, json=reply(content=ir.model_dump_json()))
 
     provider = OpenAIProvider(httpx.MockTransport(handler), api_key=FAKE_KEY)
     result = await HarnessService(provider).convert(

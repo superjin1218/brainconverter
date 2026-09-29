@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 
 import httpx
 
-from .models import DraftIR, StrategyIR
+from .models import IntentIR
 from .provider_errors import ProviderError, http_provider_error
 from .provider_types import ProviderResult
 
@@ -63,9 +62,9 @@ class ChatCompletionProvider:
             raise ProviderError("output_limit")
         if choice.get("finish_reason") != "stop":
             raise ProviderError("invalid_response")
-        content = json.loads(choice["message"]["content"])
-        model = DraftIR if isinstance(content, dict) and "schemaVersion" in content else StrategyIR
-        ir = model.model_validate(content)
+        # Old versions are readable in cached ConversionResponse objects only.
+        # A fresh response cannot bypass intent validation by returning the old schema.
+        ir = IntentIR.model_validate_json(choice["message"]["content"])
         return ProviderResult(ir, inputs, outputs, cost)
 
     async def interpret(self, system_prompt: str, strategy: str) -> ProviderResult:

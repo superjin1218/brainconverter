@@ -85,6 +85,7 @@ class ValidationSummary(BaseModel):
     schemaValid: bool = True
     sourceRequirementsPreserved: bool = True
     compilePassed: bool = True
+    intentPlanChecked: bool | None = None
 
 
 class ImprovementSuggestion(StrictModel):
@@ -112,6 +113,53 @@ class DraftIR(StrictModel):
     reason: str = Field(max_length=300)
 
 
+DataField = Literal["open", "high", "low", "close", "volume", "returns"]
+
+
+class IntentMetric(StrictModel):
+    source: str = Field(min_length=2, max_length=300)
+    operation: Literal[
+        "raw", "return", "delta", "mean", "std_dev", "relative_mean",
+        "ratio", "difference", "range_position", "correlation",
+    ]
+    field: DataField
+    window: int = Field(ge=1, le=1000)
+    reference: DataField | None
+    preference: Literal["higher", "lower"]
+    group: Literal["none", "industry", "sector", "subindustry"]
+    weight: float = Field(gt=0, le=10)
+
+    @model_validator(mode="after")
+    def consistent_measurement(self):
+        paired = self.operation in {"ratio", "difference", "correlation"}
+        if paired != (self.reference is not None):
+            raise ValueError("측정 방법에 맞는 비교 데이터가 필요합니다.")
+        if paired and self.field == self.reference:
+            raise ValueError("동일 데이터를 자기 자신과 비교할 수 없습니다.")
+        if self.operation in {"raw", "ratio", "difference", "range_position"} and self.window != 1:
+            raise ValueError("당일 측정값에는 여러 날의 기간을 적용할 수 없습니다.")
+        if self.operation == "return" and self.field == "returns":
+            raise ValueError("기간 수익률은 가격으로 측정해야 합니다.")
+        if self.operation == "range_position" and self.field not in {"open", "close"}:
+            raise ValueError("일중 가격 범위 안에서 시가 또는 종가의 위치를 측정합니다.")
+        return self
+
+
+class IntentEntry(StrictModel):
+    source: str = Field(min_length=2, max_length=300)
+    condition: str = Field(min_length=3, max_length=500)
+
+
+class IntentIR(StrictModel):
+    schemaVersion: Literal["intent-v3"]
+    status: Literal["ok", "ambiguous", "unsupported"]
+    metrics: list[IntentMetric] = Field(max_length=3)
+    entry: IntentEntry | None
+    improvementSuggestions: list[ImprovementSuggestion] = Field(max_length=3)
+    refinementOptions: list[RefinementOption] = Field(max_length=3)
+    reason: str = Field(max_length=300)
+
+
 class ConversionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -120,7 +168,7 @@ class ConversionResponse(BaseModel):
     fastExpression: str | None
     simulationSettings: dict[str, Any]
     settingsSource: dict[str, Literal["default", "user", "override"]]
-    strategyIR: DraftIR | StrategyIR | None
+    strategyIR: IntentIR | DraftIR | StrategyIR | None
     confidence: float | None = None
     validation: ValidationSummary
     warnings: list[str]

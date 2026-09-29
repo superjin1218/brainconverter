@@ -7,7 +7,7 @@ from backend.app.openai_policy import OPENAI_MODEL
 from backend.app.openai_provider import OpenAIProvider
 from backend.app.provider_errors import MESSAGES, ProviderError
 from backend.app.response_schema import strict_schema
-from backend.tests.provider_fixtures import FAKE_KEY, example_ir, reply
+from backend.tests.provider_fixtures import FAKE_KEY, intent_ir, reply
 
 PRIVATE_DETAIL = "private-upstream-detail-must-not-be-exposed"
 PRIVATE_STRATEGY = "private-user-strategy-must-not-be-exposed"
@@ -26,7 +26,7 @@ async def test_structured_request_and_usage():
     result = await OpenAIProvider(httpx.MockTransport(handler), api_key=FAKE_KEY).interpret(
         "JSON", "5일 전략"
     )
-    assert result.ir == example_ir()
+    assert result.ir == intent_ir()
     assert result.cost_microusd == 1485
 
 

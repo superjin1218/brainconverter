@@ -18,6 +18,7 @@ const VALIDATION_LABELS = {
   schemaValid: "Strategy IR 스키마",
   sourceRequirementsPreserved: "명시 조건 검사",
   compilePassed: "FASTEXPR 컴파일",
+  intentPlanChecked: "선호 방향·원문 근거 검사",
 };
 
 export class DashboardView {
@@ -189,6 +190,7 @@ export class DashboardView {
     const list = this.root.querySelector("#validation-list");
     list.replaceChildren();
     for (const [key, passed] of Object.entries(validation)) {
+      if (passed == null) continue;
       const item = document.createElement("li");
       if (!passed) item.className = "failed";
       item.textContent = VALIDATION_LABELS[key] || key;

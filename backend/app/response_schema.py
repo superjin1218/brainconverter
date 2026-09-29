@@ -1,10 +1,10 @@
 """Structured response schema; local validation retains numeric bounds."""
 
-from .models import DraftIR
+from .models import IntentIR
 
 
 def strict_schema() -> dict:
-    schema = DraftIR.model_json_schema()
+    schema = IntentIR.model_json_schema()
 
     def visit(value):
         if isinstance(value, dict):

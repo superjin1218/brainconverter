@@ -211,6 +211,26 @@ test("old cached and rejected results clear previous explanation and choices", a
   assert.equal(ui.element("#refinement-block").hidden, true);
 });
 
+test("intent validation distinguishes checked plans from untested cached results", async t => {
+  const ui = await dashboard(t);
+  ui.control.result.validation = {compilePassed: true, intentPlanChecked: null};
+  await ui.submit();
+  assert.equal(ui.element("#validation-list").children.length, 1);
+  ui.control.result.validation.intentPlanChecked = true;
+  await ui.submit();
+  let rows = ui.element("#validation-list").children;
+  assert.equal(rows.length, 2);
+  assert.equal(rows[1].textContent, "선호 방향·원문 근거 검사");
+  assert.notEqual(rows[1].className, "failed");
+  ui.control.result = {...ui.control.result, status: "REJECTED", fastExpression: null,
+    validation: {compilePassed: false, intentPlanChecked: false},
+    warnings: ["선호 방향과 코드의 점수 방향이 다릅니다."]};
+  await ui.submit();
+  rows = ui.element("#validation-list").children;
+  assert.equal(rows[1].className, "failed");
+  assert.match(ui.element("#expression-output").textContent, /선호 방향/);
+});
+
 test("a response with the wrong provider cannot appear as a successful AI result", async t => {
   const ui = await dashboard(t);
   ui.control.result = {...ui.control.result, provider: "mock"};

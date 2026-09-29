@@ -6,7 +6,8 @@ import uuid
 
 from .compiler import compile_fe, intent_mapping, source_guards, validate_compiled_fe
 from .draft_compiler import compile_draft
-from .models import ConversionResponse, ConvertRequest, DraftIR, ValidationSummary
+from .intent_compiler import compile_intent
+from .models import ConversionResponse, ConvertRequest, DraftIR, IntentIR, ValidationSummary
 from .prompts import BASE_SYSTEM_PROMPT
 from .provider_types import SemanticProvider
 from .settings import resolve_simulation_settings
@@ -38,11 +39,14 @@ class HarnessService:
             request.strategy, request.settings
         )
         guidance = {}
-        if isinstance(ir, DraftIR):
+        if isinstance(ir, IntentIR):
+            expression, errors, guidance = compile_intent(request.strategy, ir, settings)
+            source_errors = list(errors)
+        elif isinstance(ir, DraftIR):
             expression, errors, guidance = compile_draft(request.strategy, ir, settings)
             source_errors = list(errors)
         else:
-            # Legacy cached/test IR remains readable; production requests use DraftIR.
+            # Legacy test IR remains readable; production requests use IntentIR.
             source_errors = source_guards(request.strategy, ir)
             errors = list(source_errors)
             if ir.status != "ok":
@@ -75,6 +79,7 @@ class HarnessService:
             validation=ValidationSummary(
                 sourceRequirementsPreserved=not bool(source_errors or unresolved),
                 compilePassed=not bool(errors),
+                intentPlanChecked=not bool(source_errors) if isinstance(ir, IntentIR) else None,
             ),
             warnings=[*warnings, *errors],
             unresolvedSettings=unresolved,

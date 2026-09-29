@@ -1,18 +1,15 @@
 """Hypothesis design uses AI; these independent fixtures test the compiler boundary."""
 
-import json
 
-import httpx
 import pytest
 from pydantic import ValidationError
 
 from backend.app.draft_compiler import DraftCompiler
 from backend.app.models import ConversionResponse, ConvertRequest, DraftIR
 from backend.app.openai_policy import OPENAI_POLICY
-from backend.app.openai_provider import OpenAIProvider
 from backend.app.prompts import BASE_SYSTEM_PROMPT
+from backend.app.provider_types import ProviderResult
 from backend.app.service import HarnessService
-from backend.tests.provider_fixtures import FAKE_KEY, reply
 
 
 def draft(expression):
@@ -33,16 +30,15 @@ def draft(expression):
 async def convert(strategy, ir):
     calls = []
 
-    def handler(request):
-        body = json.loads(request.content)
-        calls.append(body)
-        schema = body["response_format"]["json_schema"]["schema"]
-        assert schema["properties"]["schemaVersion"]["const"] == "draft-v2"
-        assert body["max_completion_tokens"] == 1024
-        assert body["reasoning_effort"] == "none"
-        return httpx.Response(200, json=reply(content=ir.model_dump_json()))
+    class LegacyProvider:
+        name = "legacy-test"
 
-    provider = OpenAIProvider(httpx.MockTransport(handler), api_key=FAKE_KEY)
+        async def interpret(self, prompt, received_strategy):
+            calls.append(received_strategy)
+            assert received_strategy == strategy
+            return ProviderResult(ir=ir)
+
+    provider = LegacyProvider()
     result = await HarnessService(provider).convert(ConvertRequest(strategy=strategy))
     assert len(calls) == 1
     return result

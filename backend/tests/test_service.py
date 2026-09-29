@@ -93,7 +93,7 @@ async def test_success_interprets_once_and_preserves_expression_settings_and_usa
     assert len(calls) == 1
     assert result.status == "PASS"
     assert result.fastExpression == (
-        "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank(-ts_delta(close, 5)), -1)"
+        "trade_when(volume >= (1.5 * ts_mean(volume, 20)), (1 - rank(ts_delta(close, 5))), -1)"
     )
     assert len(result.simulationSettings) == 12
     assert result.confidence is None

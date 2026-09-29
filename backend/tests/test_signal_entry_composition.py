@@ -3,13 +3,12 @@
 import json
 from pathlib import Path
 
-import httpx
 import pytest
 
 from backend.app.models import ConvertRequest
-from backend.app.openai_provider import OpenAIProvider
+from backend.app.provider_types import ProviderResult
 from backend.app.service import HarnessService
-from backend.tests.provider_fixtures import FAKE_KEY, example_ir, reply
+from backend.tests.provider_fixtures import example_ir
 
 CASES = json.loads(
     (Path(__file__).resolve().parents[2] / "evals/semantic_composition_cases.json").read_text()
@@ -38,13 +37,15 @@ def interpreted_ir(index=0):
 async def convert_once(strategy, ir):
     calls = []
 
-    def handler(request):
-        body = json.loads(request.content)
-        calls.append(body)
-        assert body["messages"][-1]["content"] == strategy
-        return httpx.Response(200, json=reply(content=ir.model_dump_json()))
+    class LegacyProvider:
+        name = "legacy-test"
 
-    provider = OpenAIProvider(httpx.MockTransport(handler), api_key=FAKE_KEY)
+        async def interpret(self, prompt, received_strategy):
+            calls.append(received_strategy)
+            assert received_strategy == strategy
+            return ProviderResult(ir=ir)
+
+    provider = LegacyProvider()
     result = await HarnessService(provider).convert(ConvertRequest(strategy=strategy))
     assert len(calls) == 1
     return result
