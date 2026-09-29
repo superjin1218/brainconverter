@@ -28,6 +28,8 @@
 
 ## 최근 반영과 검증 · 2026-09-29
 
+- [PR #7](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/pull/7): 조건식의 독립 검증으로 선언하지 않은 점수 항 추가를 차단하고, ‘주식·주가’를 주 단위 기간으로 오인하는 문제를 수정했습니다. 정적 보안 검토와 회귀 결과는 [코드 검토 기록](docs/CODE_REVIEW.md), 병합·배포 확인 결과는 PR 본문에 기록합니다.
+- [PR #6](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/pull/6): README·작업 맥락 정리 main 병합 완료.
 - [PR #4](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/pull/4): 원문 근거와 선호 방향 검사, 서버 점수식 생성 적용 완료.
 - [PR #5](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/pull/5): 상세 입력 예시 적용 및 main 병합·운영 배포 완료. 확인한 운영 코드 기준은 `756dbaf`입니다. 홈페이지·상태 API HTTP 200, 배포 소스 일치, 실제 화면의 빈 입력창 예시 표시를 확인했습니다.
 - 최신 기능/화면 변경의 GitHub CI: Python·SQL 491개 + 프런트엔드 40개, 총 **531개 통과**. 별도 모의 전략 회귀는 105/105이며 실제 AI 정확도 수치가 아닙니다.

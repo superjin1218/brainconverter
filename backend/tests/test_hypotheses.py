@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from backend.app.compiler import compile_fe, validate_compiled_fe
+from backend.app.hypotheses import hypothesis_context
 from backend.app.mock_provider import MockSemanticProvider
 from backend.app.models import ConversionResponse, ConvertRequest, StrategyIR
 from backend.app.openai_policy import OPENAI_POLICY
@@ -17,6 +18,40 @@ from backend.app.provider_diagnostics import diagnostic_runtime
 from backend.app.provider_types import ProviderResult
 from backend.app.service import HarnessService
 from backend.tests.provider_fixtures import FAKE_KEY, example_ir, intent_ir, reply
+
+
+@pytest.mark.parametrize("strategy", [
+    "매일 주가가 오르는 종목", "미국 TOP3000 주식이 좋아",
+    "한 주식을 골라줘", "한 주가가 오르면 좋아", "점수를 1 주세요",
+    "한 주문만", "한 주목할 만한 종목", "1 주요 지표", "한 주세를 비교해",
+])
+def test_ordinary_words_do_not_invent_week_windows(strategy):
+    context = hypothesis_context(strategy)
+    assert context.windows == ()
+    assert context.normalized == strategy.lower()
+    assert context.assumptions == ()
+
+
+def test_detailed_example_has_only_the_requested_signal_window():
+    strategy = (
+        "미국 TOP3000 주식의 최근 5일 누적 수익률(종가 기준)이 높을수록 높은 점수를 주세요.\n"
+        "거래량이 최근 20일 평균의 1.5배 이상일 때만 점수를 갱신하고, "
+        "그 외에는 이전 점수를 유지해 주세요.\n"
+        "산업 중립화(INDUSTRY), Delay 1, Decay 4, Truncation 0.08을 적용해 주세요."
+    )
+    context = hypothesis_context(strategy)
+    assert context.windows == (5,)
+    assert context.normalized.lower() == strategy.lower()
+    assert context.assumptions == ()
+
+
+@pytest.mark.parametrize("strategy,days", [
+    ("1주 모멘텀", 5), ("일주일 반전", 5), ("한 주 동안", 5),
+    ("두 주간", 10), ("3주일 기준", 15), ("최근2주모멘텀", 10),
+    ("한 달 모멘텀", 21), ("3개월 모멘텀", 63), ("one week momentum", 5),
+])
+def test_period_units_remain_supported(strategy, days):
+    assert hypothesis_context(strategy).windows == (days,)
 
 
 @pytest.mark.parametrize("filename", ["hypotheses.py", "models.py", "SKILL.md"])

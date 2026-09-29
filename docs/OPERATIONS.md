@@ -1,6 +1,6 @@
 # 운영 기준
 
-새 배포 구성은 Vercel FastAPI·Supabase Auth/DB·OpenAI GPT-5.4 mini입니다. 키와 배포는 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md), 기존 회원 DB 설정은 [VERCEL_SUPABASE_SETUP.md](VERCEL_SUPABASE_SETUP.md)를 따릅니다. 전환 배포는 아직 실행하지 않았습니다.
+운영 구성은 Vercel FastAPI·Supabase Auth/DB·OpenAI GPT-5.4 mini입니다. GPT 전환과 가설 변환 기능은 배포됐습니다. 키와 배포는 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md), 기존 회원 DB 설정은 [VERCEL_SUPABASE_SETUP.md](VERCEL_SUPABASE_SETUP.md), 변경별 검증은 [CODE_REVIEW.md](CODE_REVIEW.md)를 따릅니다.
 
 ## 모델과 비용
 

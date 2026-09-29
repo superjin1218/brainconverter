@@ -1,6 +1,6 @@
 # Vercel + Supabase 회원 사이트 설정
 
-현재 코드는 OpenAI GPT-5.4 mini 전용입니다. 키·한 번에 배포하는 명령은 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md)를 따릅니다. 운영 사이트에는 아직 GPT 전환을 배포하지 않았습니다.
+현재 운영 사이트는 OpenAI GPT-5.4 mini 전용입니다. GPT 전환은 배포됐으며 키·배포 명령은 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md)를 따릅니다. 아래 초기 구축 확인값은 당시 기록이고 최신 변경은 [SESSION_CONTEXT.md](SESSION_CONTEXT.md)를 우선합니다.
 
 ## 1. Supabase DB 적용
 

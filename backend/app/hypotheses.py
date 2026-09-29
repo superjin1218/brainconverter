@@ -63,9 +63,10 @@ def hypothesis_context(strategy: str) -> HypothesisContext:
         assumptions.append(f"'{match.group(0)}'을 약 {days}거래일의 관찰 기간으로 해석했습니다.")
         return f"{days}일"
 
+    # Do not turn TOP3000 주식 or 매일 주가 into an invented week count.
     normalized_signal = re.sub(
         r"(?<![\d.])(\d+|한|두|세|일|one)\s*[-]?\s*"
-        r"(개월|달|주일|주|months?\b|weeks?\b)",
+        r"(개월|달|주일|주(?![식가세요문목])|months?\b|weeks?\b)",
         period,
         signal_text,
     )

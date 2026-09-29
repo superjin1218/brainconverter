@@ -7,6 +7,7 @@ import math
 import re
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Literal
 
 from .compiler import validate_source_numbers
 from .models import DraftIR
@@ -64,7 +65,9 @@ class DraftCompiler:
         self.fields: set[str] = set()
         self.tree: ast.Expression | None = None
 
-    def compile(self, expression: str) -> CompiledNode:
+    def compile(
+        self, expression: str, *, expected_kind: Literal["series", "condition"] = "series"
+    ) -> CompiledNode:
         try:
             self.tree = ast.parse(expression.strip(), mode="eval")
             if sum(1 for _ in ast.walk(self.tree)) > 180:
@@ -72,8 +75,11 @@ class DraftCompiler:
             result = self._node(self.tree.body, 0)
         except (SyntaxError, RecursionError) as exc:
             raise ValueError("전략 식의 구문을 해석할 수 없습니다.") from exc
-        if result.kind != "series":
-            raise ValueError("종목별 점수를 계산하는 식이 필요합니다.")
+        if result.kind != expected_kind:
+            raise ValueError(
+                "거래 조건에는 비교식이 필요합니다." if expected_kind == "condition"
+                else "종목별 점수를 계산하는 식이 필요합니다."
+            )
         return result
 
     def _node(self, node: ast.AST, depth: int) -> CompiledNode:

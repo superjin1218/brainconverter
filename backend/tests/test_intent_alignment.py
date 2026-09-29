@@ -150,6 +150,34 @@ async def test_explicit_return_and_volume_gate_survive_new_plan(window, conditio
         assert result.fastExpression is None
 
 
+@pytest.mark.parametrize("condition", [
+    "volume > 0, close, -1) + trade_when(volume > 0",
+    "volume > 0, -rank(close), -1) + trade_when(volume > 0",
+    "trade_when(volume > 0, close, -1)",
+    "rank(volume)", "100", "industry", "volume >",
+])
+async def test_entry_cannot_escape_condition_or_append_undeclared_scores(condition):
+    ir = intent_ir()
+    ir.metrics = [metric("가격이 높으면 좋아", operation="raw", window=1)]
+    ir.entry.source = "거래량이 있을 때만"
+    ir.entry.condition = condition
+    result = await convert("가격이 높으면 좋아. 거래량이 있을 때만", ir)
+    assert result.status == "REJECTED"
+    assert result.fastExpression is None
+    assert result.validation.intentPlanChecked is False
+    assert result.refinementOptions == []
+
+
+async def test_independently_compiled_condition_preserves_equivalent_comparison():
+    ir = intent_ir()
+    ir.metrics = [metric("가격이 높으면 좋아", operation="raw", window=1)]
+    ir.entry.source = "거래량이 있을 때만"
+    ir.entry.condition = " (0 < volume) "
+    result = await convert("가격이 높으면 좋아. 거래량이 있을 때만", ir)
+    assert result.status == "PASS", result.warnings
+    assert result.fastExpression == "trade_when(0 < volume, rank(close), -1)"
+
+
 @pytest.mark.parametrize("extra_source", [INTRADAY, "장 끝날 때 힘이 세진", "변동성이 낮은"])
 async def test_extra_signals_cannot_reuse_a_source_or_invent_evidence(extra_source):
     ir = plan([

@@ -7,7 +7,8 @@
 - 구체적인 지표·기간이 없는 가설도 AI가 측정 가능한 전략 초안으로 바꿔야 합니다. 원문 근거·가정·코드 설명·서로 다른 수정 선택지·개선 실험을 함께 보여주는 것이 목표입니다.
 - 사용자는 고정 모멘텀/반전 템플릿으로 대신 답하는 방식과 단순 구문 PASS를 실제 의미 검증으로 설명하는 것을 원하지 않습니다. 실제 AI 호출 결과, 오프라인 테스트, BRAIN 시뮬레이션을 구분합니다.
 - 기본 작업 방식은 별도 브랜치 → GitHub 푸시 → PR → 승인된 main 병합·배포입니다. PR #5까지는 사용자 승인 후 병합·배포를 완료했습니다. 앞선 병합 승인을 향후 모든 변경의 포괄 승인으로 해석하지 않습니다.
-- 이번 요청은 맥락 저장·README 최신화·남은 변경의 GitHub 푸시입니다. 문서와 기존 `.gitignore` 변경을 별도 `docs/current-state-and-handoff` 브랜치/PR에 저장합니다. 이번 저장 작업에는 추가 유료 AI 호출·재배포가 필요하지 않습니다.
+- PR #6의 문서 정리는 main `1659140`에 병합했습니다. 현재 요청은 중단했던 검토 수정 재개·커밋/푸시·재배포이며 이번 변경의 PR 병합과 운영 배포까지 승인됐습니다.
+- CodeRabbit은 무료·체험 여부와 관계없이 사용하지 않습니다. 전역 `~/.codex/AGENTS.md`에 기록했고 저장소 자동 리뷰도 비활성화했습니다. CLI는 로그아웃됐으며 과거 체험 해지 신청의 최종 상태는 확인하지 못했습니다. 검토 재개나 결제 활성화를 하지 않습니다.
 - 사용자는 토큰 절약을 위해 결과 중심의 짧은 답변을 선호합니다.
 
 ## 저장소와 운영 배포
@@ -15,9 +16,10 @@
 - 저장소: https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter
 - 로컬 폴더와 Vercel 프로젝트는 기존 `natural-language-brain-alpha-harness` 이름을 유지합니다.
 - 운영 주소: https://natural-language-brain-alpha-harness.vercel.app
-- 확인한 최신 운영 코드: `756dbafeed9aca697d9853cf250fddb35db1a8bb` (PR #5).
+- 이번 유지보수 변경: [PR #7](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/pull/7). 최종 main 커밋·운영 배포 ID·접근 제한 점검 결과는 PR 본문을 확인합니다.
+- 이번 유지보수 전 운영 코드: `756dbafeed9aca697d9853cf250fddb35db1a8bb` (PR #5).
 - Vercel 프로젝트: `ksj12/natural-language-brain-alpha-harness`.
-- 최신 운영 배포: `dpl_WczLvTUoUAkxtvsCoB1kY2tZQkVy`, 상태 READY/production. 홈페이지·health HTTP 200, 공급자 소스 해시 일치, 운영 HTML의 상세 placeholder·10행 입력창 일치, 실제 로그인 화면에서 빈 입력값으로 예시가 표시되는 것을 확인했습니다.
+- 이전 PR #5 운영 배포 기록: `dpl_WczLvTUoUAkxtvsCoB1kY2tZQkVy`, 상태 READY/production. 홈페이지·health HTTP 200, 공급자 소스 해시 일치, 운영 HTML의 상세 placeholder·10행 입력창 일치, 실제 로그인 화면에서 빈 입력값으로 예시가 표시되는 것을 확인했습니다.
 - 최신 배포 검증 자체의 유료 AI 호출은 0회입니다. `git.deploymentEnabled=false`이므로 Git 푸시만으로는 배포되지 않습니다.
 - 배포 절차는 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md), 기존 프로젝트 확인과 CLI 호출은 `scripts/deploy_openai.py`를 참고합니다. 이전 문서의 관리자 비용 UI ‘배포 대기’는 과거 상태이며 해당 코드는 현재 배포본에 포함돼 있습니다.
 
@@ -31,6 +33,7 @@
 
 ## 현재 해석·검증 경계
 
+- 이번 보완은 `entry.condition`을 별도 AST 비교식으로 검증한 뒤 점수와 합칩니다. 조건 조각이 괄호·쉼표로 추가 점수 항을 삽입하는 것을 거부합니다. ‘TOP3000 주식’, ‘매일 주가’에서 기간을 만들어내던 정규식도 수정했습니다.
 - OpenAI → `IntentIR` → 원문 근거/선호 방향 검사 → FASTEXPR + 설정 12개 + 자연어 설명의 흐름입니다.
 - `chat_provider.py`는 새 응답을 `IntentIR`로만 파싱합니다. 구형 `DraftIR`·`StrategyIR`은 저장 응답과 오프라인 호환용이며, 운영 실패 시 구형 템플릿으로 대체하지 않습니다.
 - AI는 최대 3개 측정 기준과 필요한 거래 조건을 정합니다. `intent_compiler.py`가 원문에 없는/겹치는 근거, 중복 측정값, 명시한 동종업계 비교 누락을 검사합니다.
@@ -53,6 +56,7 @@
 
 ## 자동 검사
 
+- 이번 보완: 로컬 Python 481개·프런트엔드 40개·모의 전략 105/105·Ruff 통과. [GitHub CI](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/actions/runs/36548819861)에서 SQL 37개를 포함한 Python 518개와 프런트엔드 40개도 통과했습니다. 보안 검토 기준 `1659140`의 105개 추적 파일에서 확인된 취약점 0건이며, 이번 수정은 전략 출력 무결성과 유지보수 문제를 보완합니다. [검토 범위와 한계](CODE_REVIEW.md)를 함께 확인하세요.
 - PR #4·#5의 CI: Python/SQL 491개 + 프런트엔드 40개 = 531개 통과.
 - 로컬 기본 Python 실행: 454개 통과, SQL 37개는 CI/격리 PostgreSQL에서 실행. Ruff·diff 검사 통과.
 - 별도 모의 전략 회귀: 105/105. 실제 AI 해석 정확도나 BRAIN 성능 지표로 보고하지 않습니다.

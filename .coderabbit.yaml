@@ -1,0 +1,5 @@
+# The owner has disabled CodeRabbit. Do not enable automatic reviews.
+# https://kb.coderabbit.ai/articles/1442026547-troubleshoot-why-coderabbit-reviews-might-not-trigger
+reviews:
+  auto_review:
+    enabled: false

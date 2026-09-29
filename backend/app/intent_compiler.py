@@ -148,7 +148,12 @@ def compile_intent(strategy: str, ir: IntentIR, settings: dict):
         assumptions.append(f"측정 기준: {meaning}; 상대 가중치 {metric.weight:g}.")
         mapping.append({"requirement": f"{metric.source} → {direction} 선호", "expression": value})
     if ir.entry:
-        expression = f"trade_when({ir.entry.condition}, ({score}), -1)"
+        # Parse the argument on its own so it cannot add calls or score terms.
+        try:
+            condition = DraftCompiler().compile(ir.entry.condition, expected_kind="condition")
+        except ValueError as exc:
+            return None, [str(exc)], {}
+        expression = f"trade_when({condition.code}, ({score}), -1)"
     else:
         expression = score
     # Reuse the typed expression boundary and explicit source-condition checks.
