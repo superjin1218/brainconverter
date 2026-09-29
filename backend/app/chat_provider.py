@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 
 import httpx
 
-from .models import StrategyIR
+from .models import DraftIR, StrategyIR
 from .provider_errors import ProviderError, http_provider_error
 from .provider_types import ProviderResult
 
@@ -62,7 +63,9 @@ class ChatCompletionProvider:
             raise ProviderError("output_limit")
         if choice.get("finish_reason") != "stop":
             raise ProviderError("invalid_response")
-        ir = StrategyIR.model_validate_json(choice["message"]["content"])
+        content = json.loads(choice["message"]["content"])
+        model = DraftIR if isinstance(content, dict) and "schemaVersion" in content else StrategyIR
+        ir = model.model_validate(content)
         return ProviderResult(ir, inputs, outputs, cost)
 
     async def interpret(self, system_prompt: str, strategy: str) -> ProviderResult:

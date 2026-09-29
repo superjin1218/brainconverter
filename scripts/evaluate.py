@@ -1,6 +1,7 @@
 """Offline regression by default; --live explicitly enables paid OpenAI calls."""
 
 import argparse
+import ast
 import asyncio
 import json
 import sys
@@ -11,9 +12,21 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backend.app.mock_provider import MockSemanticProvider  # noqa: E402
+from backend.app.draft_compiler import expression_signature  # noqa: E402
 from backend.app.models import ConvertRequest  # noqa: E402
 from backend.app.openai_provider import OpenAIProvider  # noqa: E402
 from backend.app.service import HarnessService  # noqa: E402
+
+
+def expressions_match(actual, expected):
+    if actual is None or expected is None:
+        return actual is expected
+    try:
+        return expression_signature(ast.parse(actual, mode="eval")) == expression_signature(
+            ast.parse(expected, mode="eval")
+        )
+    except (SyntaxError, ValueError):
+        return False
 
 
 async def evaluate(args):
@@ -30,7 +43,8 @@ async def evaluate(args):
         try:
             result = await service.convert(ConvertRequest(strategy=case["strategy"]))
             matched = (
-                result.status == case["status"] and result.fastExpression == case["expression"]
+                result.status == case["status"]
+                and expressions_match(result.fastExpression, case["expression"])
             )
             rows.append(
                 {

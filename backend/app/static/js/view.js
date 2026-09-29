@@ -16,7 +16,7 @@ const SETTING_LABELS = {
 const VALIDATION_LABELS = {
   jsonValid: "JSON 형식",
   schemaValid: "Strategy IR 스키마",
-  sourceRequirementsPreserved: "원문 요구 보존",
+  sourceRequirementsPreserved: "명시 조건 검사",
   compilePassed: "FASTEXPR 컴파일",
 };
 
@@ -71,7 +71,8 @@ export class DashboardView {
     this.root.querySelector("#result-mode-note").textContent = mock
       ? "모의 변환 결과입니다. 실제 AI를 사용하지 않았습니다. BRAIN 시뮬레이션은 수행하지 않습니다."
       : "AI가 해석한 코드 초안입니다. BRAIN에서 직접 시뮬레이션하세요. 실행 성공이나 수익성을 확인한 결과가 아닙니다.";
-    this.root.querySelector("#expression-output").textContent = result.fastExpression || "검증을 통과하지 못해 코드를 생성하지 않았습니다.";
+    this.root.querySelector("#expression-output").textContent = result.fastExpression ||
+      ["코드를 생성하지 못했습니다.", ...(result.warnings || [])].join("\n");
     this.root.querySelector("[data-copy-target='expression-output']").disabled = !passed;
     this.root.querySelector("#settings-copy").textContent = JSON.stringify(result.simulationSettings, null, 2);
     this.root.querySelector("[data-copy-target='settings-copy']").disabled = false;

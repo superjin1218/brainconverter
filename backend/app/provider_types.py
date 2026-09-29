@@ -5,12 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from .models import StrategyIR
+from .models import DraftIR, StrategyIR
 
 
 @dataclass(frozen=True)
 class ProviderResult:
-    ir: StrategyIR
+    ir: DraftIR | StrategyIR
     input_tokens: int = 0
     output_tokens: int = 0
     cost_microusd: int = 0

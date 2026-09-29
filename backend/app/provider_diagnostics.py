@@ -32,6 +32,7 @@ def diagnostic_runtime() -> dict:
             "models.py",
             "hypotheses.py",
             "compiler.py",
+            "draft_compiler.py",
             "service.py",
             "strategy_guidance.py",
             "prompts.py",

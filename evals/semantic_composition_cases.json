@@ -1,0 +1,20 @@
+[
+  {
+    "id": "return-with-entry",
+    "strategy": "최근 5일 수익률이 높은 종목을 선호해. 거래량이 최근 20일 평균의 1.5배 이상일 때만 거래해줘.",
+    "status": "PASS",
+    "expression": "trade_when(volume >= 1.5 * ts_mean(volume, 20), rank((close / ts_delay(close, 5) - 1)), -1)"
+  },
+  {
+    "id": "changed-windows-and-comparison",
+    "strategy": "최근 9일 수익률이 낮은 종목에 높은 점수를 줘. 거래량이 최근 17일 평균의 0.8배 미만일 때만 점수를 갱신해.",
+    "status": "PASS",
+    "expression": "trade_when(volume < 0.8 * ts_mean(volume, 17), rank(-(close / ts_delay(close, 9) - 1)), -1)"
+  },
+  {
+    "id": "unnamed-volume-preference",
+    "strategy": "사람들이 많이 거래하는 종목을 더 좋게 보고 싶어",
+    "status": "PASS",
+    "expression": "rank(volume)"
+  }
+]

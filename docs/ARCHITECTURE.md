@@ -12,9 +12,11 @@
 
 ## 해석과 생성
 
-`backend/app/skills/brain-strategy/SKILL.md`의 본문이 모델 시스템 지침입니다. 모델은 StrategyIR JSON을 반환하며 `service.py`가 원문 조건을 검사하고 `compiler.py`가 최종 FASTEXPR을 생성합니다. confidence는 기존 응답과의 호환성을 위한 null 필드입니다.
+`backend/app/skills/brain-strategy/SKILL.md`가 실제 모델의 시스템 지침입니다. 새 요청은 `DraftIR(schemaVersion="draft-v2")`을 반환합니다. AI는 가설에서 측정 방법·누락 기간·점수 조합을 설계하고 가정·개선 실험·서로 다른 수정 선택지를 같은 응답에 포함합니다. 운영 해석은 모멘텀·반전 키워드로 분기하지 않습니다.
 
-`hypotheses.py`는 모멘텀·반전 가설, 관찰 기간, 주/월 환산과 기본값 규칙을 검사합니다. `SignalIR.operation=return`은 종가 비율로 기간 수익률을 계산하며 기존 절대 변화량 `delta`와 구분합니다. 검증을 통과한 IR에서 `strategy_guidance.py`가 자연어 설명·가정·개선 실험·수정 선택지를 생성합니다. 이 단계에는 추가 모델 호출이 없습니다. 실패 결과에는 성공한 전략처럼 보이는 설명이나 제안을 붙이지 않습니다.
+`draft_compiler.py`는 식을 Python AST로 파싱하되 실행하지 않습니다. 허용된 데이터·연산·함수와 인자 종류, 양수 관찰 기간, 중첩·노드 수를 검사해 FASTEXPR을 출력합니다. 속성 접근·첨자·임의 함수·실행 구문은 허용하지 않습니다. 자연어 계산 설명과 연산 대응표도 파싱한 식에서 만듭니다. 추가 모델 호출은 없습니다. 원문 숫자와 일부 명시 조건 검사는 의미의 전면적인 증명이 아니며 이를 UI에서 ‘명시 조건 검사’로 표시합니다.
+
+기존 `StrategyIR`/`compiler.py`/`hypotheses.py`/`strategy_guidance.py` 경로는 오프라인 mock과 기존 응답 호환용입니다. 운영 응답 스키마는 새 `DraftIR`만 요청하며, 새 경로가 실패해도 기존 템플릿으로 대체하지 않습니다. confidence는 호환성을 위한 null입니다.
 
 `view.js`의 수정 선택지는 `form.js`의 입력과 설정만 갱신합니다. 사용자가 다시 변환할 때 새 요청이 발생하며, 화면에는 기존 결과가 변경 전 전략임을 표시합니다. 폼에 노출되지 않는 Test Period·NaN 설정 등도 보존하고 로그아웃 시 초안과 함께 삭제합니다. 기존 DB 캐시에는 새 응답 필드가 없어도 기본 빈 값으로 읽을 수 있습니다.
 

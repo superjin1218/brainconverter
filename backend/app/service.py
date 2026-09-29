@@ -5,7 +5,8 @@ import os
 import uuid
 
 from .compiler import compile_fe, intent_mapping, source_guards, validate_compiled_fe
-from .models import ConversionResponse, ConvertRequest, ValidationSummary
+from .draft_compiler import compile_draft
+from .models import ConversionResponse, ConvertRequest, DraftIR, ValidationSummary
 from .prompts import BASE_SYSTEM_PROMPT
 from .provider_types import SemanticProvider
 from .settings import resolve_simulation_settings
@@ -33,22 +34,33 @@ class HarnessService:
             self.job_semaphore.release()
 
         ir = result.ir
-        source_errors = source_guards(request.strategy, ir)
-        errors = list(source_errors)
-        if ir.status != "ok":
-            errors.append(f"전략 해석 상태가 {ir.status}입니다. 전략을 구체화해 주세요.")
-        expression = None
-        if not errors:
-            try:
-                expression = compile_fe(ir)
-                compile_errors = validate_compiled_fe(request.strategy, ir, expression)
-                source_errors.extend(compile_errors)
-                errors.extend(compile_errors)
-            except ValueError:
-                errors.append("현재 컴파일러로 표현할 수 없는 전략입니다.")
         settings, sources, warnings, unresolved = resolve_simulation_settings(
             request.strategy, request.settings
         )
+        guidance = {}
+        if isinstance(ir, DraftIR):
+            expression, errors, guidance = compile_draft(request.strategy, ir, settings)
+            source_errors = list(errors)
+        else:
+            # Legacy cached/test IR remains readable; production requests use DraftIR.
+            source_errors = source_guards(request.strategy, ir)
+            errors = list(source_errors)
+            if ir.status != "ok":
+                errors.append(f"전략 해석 상태가 {ir.status}입니다. 전략을 구체화해 주세요.")
+            expression = None
+            if not errors:
+                try:
+                    expression = compile_fe(ir)
+                    compile_errors = validate_compiled_fe(request.strategy, ir, expression)
+                    source_errors.extend(compile_errors)
+                    errors.extend(compile_errors)
+                except ValueError:
+                    errors.append("현재 컴파일러로 표현할 수 없는 전략입니다.")
+            if not errors:
+                guidance = {
+                    "intentMapping": intent_mapping(ir),
+                    **strategy_guidance(request.strategy, ir, settings),
+                }
         if unresolved:
             errors.append("지원하지 않거나 유효하지 않은 시뮬레이션 설정이 있습니다.")
         status = "REJECTED" if errors else "PASS"
@@ -72,6 +84,5 @@ class HarnessService:
                 "outputTokens": result.output_tokens,
                 "costMicrousd": result.cost_microusd,
             },
-            intentMapping=intent_mapping(ir) if status == "PASS" else [],
-            **(strategy_guidance(request.strategy, ir, settings) if status == "PASS" else {}),
+            **(guidance if status == "PASS" else {}),
         )

@@ -1,10 +1,10 @@
 """Structured response schema; local validation retains numeric bounds."""
 
-from .models import StrategyIR
+from .models import DraftIR
 
 
 def strict_schema() -> dict:
-    schema = StrategyIR.model_json_schema()
+    schema = DraftIR.model_json_schema()
 
     def visit(value):
         if isinstance(value, dict):

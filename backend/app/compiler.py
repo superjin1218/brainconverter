@@ -168,6 +168,12 @@ def validate_compiled_fe(strategy: str, ir: StrategyIR, expression: str) -> list
     if ir.entry.enabled and "trade_when(" not in expression:
         errors.append("진입 조건이 컴파일 결과에서 사라졌습니다.")
 
+    return errors + validate_source_numbers(strategy, expression)
+
+
+def validate_source_numbers(strategy: str, expression: str) -> list[str]:
+    errors: list[str] = []
+
     # 설정 숫자(예: TOP3000, Delay 1)는 FE에 들어가지 않으므로 제외한다.
     strategy_without_settings = re.sub(
         r"(?i)(top\s*\d+|delay\s*[:=]?\s*[01]|딜레이\s*[:=]?\s*[01]|\bD[01]\b|"
@@ -178,6 +184,8 @@ def validate_compiled_fe(strategy: str, ir: StrategyIR, expression: str) -> list
         hypothesis_context(strategy).normalized,
     )
     numbers = {Decimal(n) for n in re.findall(r"(?<![\w.])\d+(?:\.\d+)?", expression)}
+    if re.search(r"\breturns\b", expression):
+        numbers.add(Decimal(1))  # The returns field already represents a one-day return.
     for number in re.findall(r"(?<![\d.])\d+(?:\.\d+)?", strategy_without_settings):
         if Decimal(number) not in numbers:
             errors.append(f"전략의 숫자 {number}이 컴파일 결과에서 사라졌습니다.")

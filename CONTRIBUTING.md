@@ -13,6 +13,7 @@
 - `conversion.py`: 회원 작업 예약·대기·예산·저장과 변환 흐름을 조정합니다.
 - `service.py`: 단일 모델 해석, 원문 검사, 컴파일 순서를 조정합니다.
 - `compiler.py`: Strategy IR을 FASTEXPR로 바꾸는 순수 함수를 둡니다.
+- `draft_compiler.py`: AI가 설계한 식을 허용 구문·함수·인자로 파싱하고 설명합니다. 식을 실행하지 않습니다. 새 운영 요청은 `DraftIR`이며 기존 `StrategyIR`은 캐시·오프라인 회귀 호환용입니다.
 - `hypotheses.py`: 가설의 방향·기간과 주/월 환산·생략값 규칙을 관리합니다.
 - `strategy_guidance.py`: 검증된 IR의 설명·가정·개선 실험과 재변환 선택지를 생성합니다.
 - `settings.py`: BRAIN 설정 기본값과 명시값을 해석합니다.

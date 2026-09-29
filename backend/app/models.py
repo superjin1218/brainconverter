@@ -99,6 +99,19 @@ class RefinementOption(StrictModel):
     strategy: str
 
 
+class DraftIR(StrictModel):
+    """AI-designed hypothesis draft; its expression is parsed, never executed."""
+
+    schemaVersion: Literal["draft-v2"]
+    status: Literal["ok", "ambiguous", "unsupported"]
+    hypothesis: str = Field(max_length=250)
+    expression: str = Field(max_length=2000)
+    assumptions: list[str] = Field(max_length=5)
+    improvementSuggestions: list[ImprovementSuggestion] = Field(max_length=3)
+    refinementOptions: list[RefinementOption] = Field(max_length=3)
+    reason: str = Field(max_length=300)
+
+
 class ConversionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -107,7 +120,7 @@ class ConversionResponse(BaseModel):
     fastExpression: str | None
     simulationSettings: dict[str, Any]
     settingsSource: dict[str, Literal["default", "user", "override"]]
-    strategyIR: StrategyIR | None
+    strategyIR: DraftIR | StrategyIR | None
     confidence: float | None = None
     validation: ValidationSummary
     warnings: list[str]
