@@ -2,15 +2,15 @@
 
 자연어 전략을 FASTEXPR 초안과 BRAIN 설정 12개로 변환합니다. 웹사이트는 Vercel, 회원가입·승인·사용량 DB는 Supabase를 사용합니다. 별도 Google Cloud·Oracle·Cloudflare 서버가 필요하지 않습니다.
 
-저장소: [blockcoder-sj/natural-language-brain-alpha-Converter](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter) (2026-09-29 이름 변경).
+운영 사이트: [BRAIN Alpha Harness](https://natural-language-brain-alpha-harness.vercel.app) · 저장소: [blockcoder-sj/natural-language-brain-alpha-Converter](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter). 저장소 이름과 로컬 폴더·Vercel 프로젝트 이름은 다릅니다.
 
 구체적인 지표·기간·전략 이름이 없어도 시작할 수 있습니다. **“덜 출렁이는 종목이 좋아”, “갑자기 사람들이 몰리는 주식이 궁금해”, “잘 오르면서 안정적인 주식이 좋아”**처럼 가설을 적으면 AI가 측정 방법과 빠진 조건을 정해 전략 초안을 만듭니다. AI가 고른 대리 지표·기간·조합은 가정으로 표시합니다.
 
 새 운영 변환은 `IntentIR(intent-v3)`을 사용합니다. AI가 원문의 근거 문구, 측정 방법, 선호 방향(높은 값/낮은 값), 비교 집단을 정하고 서버가 점수식을 만듭니다. 이름이 정해진 전략 템플릿을 선택하는 구조가 아닙니다. 같은 근거로 신호를 중복 추가하거나 음수 가중치로 방향을 뒤집는 것을 막고, 합성 측정값을 바꿔 코드의 점수가 선언한 선호 방향으로 움직이는지 검사합니다. 설명도 같은 계획과 코드에서 생성합니다. 기존 `DraftIR`·`StrategyIR`은 이전 결과와 오프라인 회귀 호환용입니다.
 
-**원하는 방향으로 다듬기**와 개선 실험도 같은 AI 응답에서 가설에 맞게 생성합니다. 선택지를 누르면 수정 전략과 기존 시뮬레이션 설정을 입력창에 반영하고, 다시 변환 버튼을 눌렀을 때만 새 AI 요청을 보냅니다. 코드의 계산 설명은 검증된 식에서 생성합니다. 변환당 AI 호출은 여전히 1회입니다.
+**원하는 방향으로 다듬기**와 개선 실험도 같은 AI 응답에서 가설에 맞게 생성합니다. 선택지를 누르면 수정 전략과 기존 시뮬레이션 설정을 입력창에 반영하고, 다시 변환 버튼을 눌렀을 때만 새 AI 요청을 보냅니다. 코드의 계산 설명은 검증된 식에서 생성합니다. 변환당 AI 호출은 여전히 1회입니다. **다듬기 선택지에는 유사한 제안의 반복과 제목의 방향 반전이 확인되어 보완이 필요합니다.** 현재 코드 검사는 선택지의 제목·설명·수정 전략 사이의 의미 일치나 알파 개선 효과까지 보장하지 않습니다.
 
-새 배포 모델은 **OpenAI GPT-5.4 mini**, 추론은 최저값 **none**으로 고정했습니다. 실제 호출은 OpenAI만 지원합니다. 변환 규칙을 담은 [SKILL.md](backend/app/skills/brain-strategy/SKILL.md)를 시스템 지침으로 읽어 **한 번** 해석합니다. Python이 구조·원문 조건을 검사하고 허용된 FASTEXPR를 생성합니다. 여러 에이전트의 합의나 자동 모델 재시도는 사용하지 않습니다.
+운영 모델은 **OpenAI GPT-5.4 mini**, 추론은 최저값 **none**으로 고정했습니다. 실제 호출은 OpenAI만 지원합니다. 변환 규칙을 담은 [SKILL.md](backend/app/skills/brain-strategy/SKILL.md)를 시스템 지침으로 읽어 **한 번** 해석합니다. Python이 구조·원문 조건을 검사하고 허용된 FASTEXPR를 생성합니다. 여러 에이전트의 합의나 자동 모델 재시도는 사용하지 않습니다.
 
 ## 먼저 볼 문서
 
@@ -20,12 +20,32 @@
 - 로컬 실행·키 연결: [LOCAL_TEST.md](docs/LOCAL_TEST.md)
 - Vercel·Supabase 회원 사이트 설정: [VERCEL_SUPABASE_SETUP.md](docs/VERCEL_SUPABASE_SETUP.md)
 - 완료한 검증과 아직 남은 작업: [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md)
+- 실제 가설 5건의 코드와 남은 문제: [HYPOTHESIS_VALIDATION_2026-09-29.md](docs/HYPOTHESIS_VALIDATION_2026-09-29.md)
 - 모델 검증 범위·월 비용 (이전 조사 기록): [MODEL_COST_AND_VALIDATION.md](docs/MODEL_COST_AND_VALIDATION.md)
 - 누적 2만 원 자동 중지: [AI_BUDGET.md](docs/AI_BUDGET.md)
 - 이전 Meta 배포 실패 조사 기록: [DEPLOYED_CONVERSION_RECOVERY.md](docs/DEPLOYED_CONVERSION_RECOVERY.md)
 - 푸시 전 코드 검토·검증 기록: [CODE_REVIEW.md](docs/CODE_REVIEW.md)
 
-2026-09-28 OpenAI 전환 코드와 배포 명령을 준비했습니다. 사용자가 배포 명령을 실행했고 운영 홈페이지·상태 API의 HTTP 200 및 GPT 설정·공급자 소스 해시 일치를 확인했습니다. 이번 배포 확인에서 유료 AI 생성은 실행하지 않았습니다. 운영 DB의 OpenAI 예산 업그레이드는 적용했고 기존 누적 52원·13건을 보존했습니다. 운영 사이트는 OpenAI 배포본이며, 이전 Meta 과금 표시·모델 접근 조사 기록은 [META_BILLING_INVESTIGATION.md](docs/META_BILLING_INVESTIGATION.md)와 [DEPLOYED_CONVERSION_RECOVERY.md](docs/DEPLOYED_CONVERSION_RECOVERY.md)에 있습니다. `git.deploymentEnabled=false`로 Git 푸시만으로는 배포하지 않습니다.
+## 최근 반영과 검증 · 2026-09-29
+
+- [PR #4](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/pull/4): 원문 근거와 선호 방향 검사, 서버 점수식 생성 적용 완료.
+- [PR #5](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter/pull/5): 상세 입력 예시 적용 및 main 병합·운영 배포 완료. 확인한 운영 코드 기준은 `756dbaf`입니다. 홈페이지·상태 API HTTP 200, 배포 소스 일치, 실제 화면의 빈 입력창 예시 표시를 확인했습니다.
+- 최신 기능/화면 변경의 GitHub CI: Python·SQL 491개 + 프런트엔드 40개, 총 **531개 통과**. 별도 모의 전략 회귀는 105/105이며 실제 AI 정확도 수치가 아닙니다.
+- 선호 방향 검사 배포 후 운영 UI에서 **실제 AI 5회(기존 오답 재검사 2회 + 다른 가설 3회)**를 실행했습니다. 모두 코드가 생성됐고 선택한 대리 지표의 기본 점수 방향은 가설과 부합했습니다. 다듬기 선택지 문제와 대리 지표의 한계는 [실제 검증 기록](docs/HYPOTHESIS_VALIDATION_2026-09-29.md)에 남겼습니다. 알파 개선안의 품질을 체계적으로 평가하거나 BRAIN 백테스트를 수행한 것은 아닙니다.
+
+`git.deploymentEnabled=false`이므로 Git 푸시만으로 재배포되지 않습니다. 협업 변경은 별도 브랜치와 PR로 올리고, 승인된 변경을 main에 병합·배포합니다. 이전 Meta 연결·비용 기록은 이력 문서에 보존하며 현재 실제 생성 경로는 OpenAI뿐입니다.
+
+## 입력 예시: 세 문장이 하나의 전략
+
+빈 입력창에는 다음 상세 예시를 표시합니다. 실제 입력값은 비어 있으며 입력을 시작하면 예시가 사라집니다.
+
+> 미국 TOP3000 주식의 최근 5일 누적 수익률(종가 기준)이 높을수록 높은 점수를 주세요.
+>
+> 거래량이 최근 20일 평균의 1.5배 이상일 때만 점수를 갱신하고, 그 외에는 이전 점수를 유지해 주세요.
+>
+> 산업 중립화(INDUSTRY), Delay 1, Decay 4, Truncation 0.08을 적용해 주세요.
+
+위 세 문장은 **거래량 조건을 붙인 단기 모멘텀 전략 하나**입니다. 대상 종목군·측정 기간·선호 방향, 점수 갱신 조건과 미충족 시 처리, 시뮬레이션 설정을 차례로 명시한 작성 예시입니다. 성과가 검증된 추천 알파를 뜻하지 않습니다. 생략한 설정은 기본값으로 채웁니다.
 
 ## 회원 이용 흐름
 
