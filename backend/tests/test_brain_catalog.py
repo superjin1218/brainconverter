@@ -99,7 +99,8 @@ async def test_live_failure_cannot_split_one_arithmetic_measurement_into_two_sco
 async def test_two_explicit_financial_preferences_are_not_mistaken_for_one_chain():
     source = "순이익과 현금흐름의 차이가 작고 부채를 자산으로 나눈 비율이 낮은 기업"
     ir = plan([
-        metric("순이익과 현금흐름의 차이가 작고", operation="difference", field="fnd6_newa2v1300_ni",
+        metric("순이익과 현금흐름의 차이가 작고", operation="difference",
+               field="fnd6_newa2v1300_ni",
                reference="operating_cashflow_reported_value", window=1, preference="lower"),
         metric("부채를 자산으로 나눈 비율이 낮은 기업", operation="ratio",
                field="fnd6_cptnewqv1300_ltq", reference="fnd6_mfma1_at", window=1,
