@@ -142,7 +142,13 @@ def site():
                 return httpx.Response(401, json={"message": "expired"})
             state["revoked"] = True
             return httpx.Response(204)
+        if path == "/auth/v1/settings":
+            return httpx.Response(200, json={
+                "mailer_autoconfirm": state.get("autoconfirm", True),
+                "disable_signup": state.get("disableSignup", False),
+            })
         if path == "/auth/v1/signup":
+            state["signupRedirect"] = request.url.params.get("redirect_to")
             return httpx.Response(200, json={"access_token": ACCESS, "user": {"id": USER_ID}})
         if path.endswith("/brain_access"):
             return httpx.Response(
@@ -252,6 +258,7 @@ def test_provider_status_requires_approval_and_never_exposes_or_calls_key(site, 
         "model": "gpt-5.4-mini",
         "keyConfigured": True,
         "localKeyEntry": False,
+        "conversionsEnabled": True,
     }
     assert "server-only-fake-openai-key" not in response.text
     assert state["aiCalls"] == 0
@@ -259,10 +266,11 @@ def test_provider_status_requires_approval_and_never_exposes_or_calls_key(site, 
     assert client.get("/api/provider").json()["keyConfigured"] is False
 
 
+@pytest.mark.parametrize("confirmed", [False, True])
 @pytest.mark.parametrize("status", ["pending", "rejected", "suspended"])
-def test_unapproved_user_metadata_cannot_grant_access(site, status):
+def test_unapproved_user_metadata_cannot_grant_access(site, status, confirmed):
     client, state, _ = site
-    state["status"] = status
+    state.update(status=status, confirmed=confirmed)
     connect(client)
     assert client.get("/api/auth/me").json()["status"] == status
     assert convert(client).status_code == 403
@@ -315,15 +323,16 @@ def test_queued_request_claims_once_and_polling_never_calls_ai(site):
     assert state["aiCalls"] == 1
 
 
-def test_expired_or_unconfirmed_session_cannot_convert(site):
+def test_expired_session_is_denied_but_approved_unconfirmed_identity_can_convert(site):
     client, state, _ = site
     state["status"] = "approved"
     connect(client)
     state["valid"] = False
     assert convert(client).status_code == 401
-    state.update(valid=True, confirmed=False)
-    assert convert(client).status_code == 403
     assert state["aiCalls"] == 0
+    state.update(valid=True, confirmed=False)
+    assert convert(client).status_code == 200
+    assert state["aiCalls"] == 1
 
 
 def test_cross_origin_cookie_request_is_rejected_before_auth_or_ai(site):
@@ -368,13 +377,94 @@ def test_signup_passes_only_display_name_and_does_not_return_an_access_token(sit
     assert response.status_code == 200
     payload = next(body for path, body in state["calls"] if path == "/auth/v1/signup")
     assert payload["data"] == {"display_name": "새 회원"}
+    assert state["signupRedirect"] is None
+    assert "바로 로그인" in response.json()["message"]
+    assert "인증 메일" not in response.text
     assert ACCESS not in response.text
     assert not response.headers.get_list("set-cookie")
 
 
+def test_legacy_confirmation_api_is_retired_without_remote_calls_or_session(site):
+    client, state, _ = site
+    response = client.post(
+        "/api/auth/confirmation", json={"accessToken": ACCESS}, headers=HEADERS
+    )
+    assert response.status_code in {404, 405}
+    assert not response.headers.get_list("set-cookie")
+    assert not state["calls"]
+    response = client.get("/auth/callback")
+    assert response.status_code == 200
+    assert 'id="auth-form"' in response.text
+    assert 'minlength="6"' in response.text
+    assert 'id="members-identity-warning"' in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["strict-transport-security"] == "max-age=31536000"
+    assert "base-uri 'none'" in response.headers["content-security-policy"]
+    assert client.get("/", headers={"host": "attacker.example.test"}).status_code == 400
+
+
+@pytest.mark.parametrize("settings", [{"autoconfirm": False}, {"disableSignup": True}])
+def test_stale_supabase_signup_settings_cannot_send_confirmation_mail(site, settings):
+    client, state, _ = site
+    state.update(settings)
+    response = client.post("/api/auth/signup", json={
+        "email": "member@example.test", "password": "123456", "displayName": "회원",
+    }, headers=HEADERS)
+    assert response.status_code == 503
+    assert not any(path == "/auth/v1/signup" for path, _ in state["calls"])
+    assert state["aiCalls"] == 0
+
+
+def test_production_redirects_public_http_to_https_and_keeps_loopback_health(site):
+    client, state, _ = site
+    with TestClient(client.app, base_url=ORIGIN.replace("https:", "http:")) as insecure:
+        response = insecure.get("/auth/callback?probe=1", follow_redirects=False)
+        assert response.status_code == 308
+        assert response.headers["location"] == ORIGIN + "/auth/callback?probe=1"
+        assert 'id="auth-form"' not in response.text
+        response = insecure.post(
+            "/api/auth/login", json={"email": "test@example.test", "password": PASSWORD},
+            follow_redirects=False,
+        )
+        assert response.status_code == 308
+        assert not response.headers.get_list("set-cookie")
+    with TestClient(client.app, base_url="http://127.0.0.1:3000") as local:
+        assert local.get("/").status_code == 200
+        assert local.get("/api/health").status_code == 200
+    assert not state["calls"]
+
+
+def test_disabled_conversion_cannot_initialize_provider_reserve_or_diagnose(site, monkeypatch):
+    from backend.app.membership import MembershipService
+
+    _, _, config = site
+
+    async def identify(self, request, **kwargs):
+        return {"id": USER_ID, "role": "admin", "status": "approved"}
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("paused deployment must not initialize AI or call reservation RPCs")
+
+    monkeypatch.setattr(MembershipService, "identify", identify)
+    monkeypatch.setattr(MembershipService, "rpc", forbidden)
+    app = create_app(replace(config, conversions_enabled=False), provider_factory=forbidden)
+    with TestClient(app, base_url=ORIGIN) as client:
+        assert convert(client).status_code == 503
+        assert client.get("/api/admin/provider-check").status_code == 503
+        assert client.get("/api/provider").json()["conversionsEnabled"] is False
+        assert client.get("/api/health").json()["conversionsEnabled"] is False
+        assert app.state.active_conversions == 0
+
+
+def test_conversion_switch_rejects_typographical_configuration_errors(monkeypatch):
+    monkeypatch.setenv("CONVERSIONS_ENABLED", "flase")
+    with pytest.raises(ValueError, match="CONVERSIONS_ENABLED"):
+        AppConfig.from_environment()
+
+
 @pytest.mark.parametrize("endpoint", ["login", "signup"])
-@pytest.mark.parametrize("password", ["1", "123456", "2026012345"])
-def test_numeric_passwords_pass_through_to_supabase_without_app_minimum(site, endpoint, password):
+@pytest.mark.parametrize("password", ["123456", "abcdef", "!!!!!!", "2026012345", "가나다라마바사"])
+def test_six_character_passwords_need_no_character_combination(site, endpoint, password):
     client, state, _ = site
     response = client.post(
         f"/api/auth/{endpoint}",
@@ -389,11 +479,12 @@ def test_numeric_passwords_pass_through_to_supabase_without_app_minimum(site, en
     assert state["aiCalls"] == 0
 
 
-@pytest.mark.parametrize("password", ["", None, 123456, "x" * 257])
-def test_missing_or_invalid_passwords_are_rejected_without_remote_call(site, password):
+@pytest.mark.parametrize("endpoint", ["signup", "login"])
+@pytest.mark.parametrize("password", ["", "1", "12345", None, 123456, "x" * 257])
+def test_missing_or_invalid_passwords_are_rejected_without_remote_call(site, endpoint, password):
     client, state, _ = site
     response = client.post(
-        "/api/auth/signup",
+        f"/api/auth/{endpoint}",
         json={"email": "member@example.test", "password": password, "displayName": "테스트 회원"},
         headers=HEADERS,
     )
@@ -709,3 +800,41 @@ def test_failed_reservation_cannot_finish_a_job_it_does_not_own(site):
     assert state["aiCalls"] == 0
     assert not any(path.endswith("brain_finish") for path, _ in state["calls"])
     assert client.app.state.active_conversions == 0
+
+
+@pytest.mark.parametrize("status", ["pending", "rejected", "suspended"])
+def test_unapproved_admin_cannot_use_admin_or_conversion_apis(site, status):
+    client, state, _ = site
+    state.update(status=status, role="admin", confirmed=False)
+    connect(client)
+    for endpoint in ["/api/admin/members", "/api/admin/budget", "/api/admin/provider-check"]:
+        assert client.get(endpoint).status_code == 403
+    assert client.post(f"/api/admin/members/{USER_ID}", json={"status": "approved"},
+                       headers=HEADERS).status_code == 403
+    assert convert(client).status_code == 403
+    assert state["aiCalls"] == 0
+
+
+def test_signup_login_pending_approval_and_mock_conversion_flow(site):
+    client, state, _ = site
+    state["confirmed"] = False
+    signup = client.post("/api/auth/signup", json={
+        "email": "member@example.test", "password": "123456", "displayName": "새 회원",
+        "status": "approved", "role": "admin",
+    }, headers=HEADERS)
+    assert signup.status_code == 200
+    assert connect(client).status_code == 200
+    member = client.get("/api/auth/me").json()
+    assert (member["status"], member["role"]) == ("pending", "member")
+    assert convert(client).status_code == 403
+    assert client.get("/api/admin/members").status_code == 403
+    state.update(status="approved", role="admin", members=[{
+        "id": USER_ID, "status": "pending", "role": "member",
+    }])
+    assert client.post(f"/api/admin/members/{USER_ID}", json={"status": "approved"},
+                       headers=HEADERS).status_code == 200
+    assert state["members"][0]["status"] == "approved"
+    state.update(status="approved", role="member")
+    assert client.get("/api/auth/me").json()["status"] == "approved"
+    assert convert(client).status_code == 200
+    assert state["aiCalls"] == 1  # CountingProvider is a local MockSemanticProvider.

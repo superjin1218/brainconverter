@@ -21,10 +21,10 @@ test-sql:
 	RUN_SQL_TESTS=1 .venv/bin/pytest -q backend/tests/test_membership_sql.py
 
 test-frontend:
-	node --test backend/tests/frontend_state.test.mjs
+	node --test backend/tests/*.test.mjs
 
 lint:
-	.venv/bin/ruff check backend scripts/deploy_openai.py
+	.venv/bin/ruff check backend scripts/deploy_openai.py scripts/check_production_config.py scripts/verify_production.py
 
 docker-build:
 	docker build -t brain-alpha-harness:local .

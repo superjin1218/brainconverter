@@ -1,13 +1,13 @@
--- Run only after seungzookim@gmail.com has signed up and confirmed the email.
--- This is a trusted dashboard operation; the signup form never grants admin.
+-- Trusted SQL Editor only. Verify the operator through a separate trusted channel,
+-- then SET brain.bootstrap_operator_id to that account's UUID in this session.
+-- Email addresses/auto-confirm timestamps cannot establish identity.
 begin;
 do $$
 declare operator_id uuid;
 begin
-  select id into operator_id from auth.users
-  where lower(email) = 'seungzookim@gmail.com' and email_confirmed_at is not null;
-  if operator_id is null then
-    raise exception 'confirmed operator account required';
+  operator_id := nullif(current_setting('brain.bootstrap_operator_id',true),'')::uuid;
+  if operator_id is null or not exists(select 1 from auth.users where id=operator_id) then
+    raise exception 'explicit independently verified operator UUID required';
   end if;
   update private.brain_members set role='admin', status='approved', updated_at=now()
   where user_id=operator_id;

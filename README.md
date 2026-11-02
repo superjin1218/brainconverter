@@ -1,5 +1,7 @@
 # 자연어 → WorldQuant BRAIN 코드 웹사이트
 
+Ubuntu 자체 서버 운영(3000번 포트, 기존 Cloudflare Tunnel, 이메일 인증 없는 공개 가입·관리자 승인)은 [Ubuntu 운영 절차](docs/UBUNTU_OPERATIONS.md)를 따릅니다. 인증 정책 변경과 배포 결과는 [인증 정책 배포 보고서](docs/PASSWORD_ONLY_DEPLOYMENT_REPORT.md)에서 확인합니다. 아래 Vercel 관련 내용은 이전 운영 기록입니다.
+
 자연어 전략을 FASTEXPR 초안과 BRAIN 설정 12개로 변환합니다. 웹사이트는 Vercel, 회원가입·승인·사용량 DB는 Supabase를 사용합니다. 별도 Google Cloud·Oracle·Cloudflare 서버가 필요하지 않습니다.
 
 운영 사이트: [BRAIN Alpha Harness](https://natural-language-brain-alpha-harness.vercel.app) · 저장소: [blockcoder-sj/natural-language-brain-alpha-Converter](https://github.com/blockcoder-sj/natural-language-brain-alpha-Converter). 저장소 이름과 로컬 폴더·Vercel 프로젝트 이름은 다릅니다.
@@ -51,13 +53,15 @@
 
 ## 회원 이용 흐름
 
-현재 운영 방식은 **운영자가 Supabase에서 이메일·비밀번호를 지정해 일반 회원 생성(Auto confirm user) → 사이트에서 승인 → 회원 로그인·전략 변환**입니다. 이 방식에는 가입 인증메일용 SMTP가 필요하지 않습니다. 사이트의 직접 회원가입 기능도 코드에 남아 있으며, 회원이 직접 가입하는 방식을 운영하려면 이메일 인증·SMTP 설정을 별도로 확인해야 합니다.
+누구나 **이메일·비밀번호로 회원가입 → 즉시 로그인 → 승인 대기 → 운영자 승인 → 전략 변환** 순서로 이용합니다. 이메일 소유 확인과 가입 인증메일 발송은 사용하지 않으며 Resend·Custom SMTP가 필요하지 않습니다. 가입 직후에는 DB의 `private.brain_members`에 `pending/member`로 등록됩니다. 가입 폼·사용자 메타데이터로 역할이나 승인 상태를 지정할 수 없습니다.
 
-운영자는 **설정 → 회원 승인 관리**에서 승인·거절·이용 중지를 처리합니다. 일반 회원에게 설정 버튼·키 입력창·남은 횟수 표시는 숨기며 서버 공용 키를 자동으로 사용합니다. 사용 한도는 서버에서 그대로 적용합니다. 최초 운영자 `seungzookim@gmail.com`의 이메일 인증·approved/admin 상태를 실제 Supabase에서 확인했습니다. 회원가입 폼의 값으로 승인·운영자 권한을 부여할 수 없습니다.
+HTML·JavaScript·FastAPI는 비밀번호 **6~256자**를 요구합니다. 영문·숫자·특수문자 조합 제한은 없으며 6자 이상 숫자만으로도 가입할 수 있습니다. Supabase의 비밀번호 인증 자체는 유지합니다.
 
-인증 토큰은 HttpOnly 쿠키에 보관합니다. 서버는 Supabase에서 로그인 신원을 확인하고 DB의 승인 상태를 검사합니다. 모델 키와 Supabase 서버 키는 배포 시 Vercel Secret, 로컬 시험 시 Git에서 제외된 `.env.local`에만 설정하며 회원에게 노출하지 않습니다.
+Supabase 설정은 **Allow new users to sign up ON, Confirm email OFF, Minimum password length 6, 문자 조합 요구 없음, Custom SMTP OFF**로 맞춥니다. 기존 DB에는 [새 인증 정책 SQL](supabase/migrations/202610310001_password_only_membership.sql)만 추가 적용합니다. 과거 초기화 마이그레이션을 다시 실행하지 않습니다. Confirm email이 켜진 상태에서는 앱이 가입 요청을 중단하므로 인증메일이 발송되지 않습니다.
 
-앱은 비밀번호의 최소 길이·특수문자·영문 조합을 요구하지 않습니다. Supabase 프로젝트의 현재 규칙은 최소 6자이며 문자 조합 요구가 없어 6자 이상 숫자 학번을 사용할 수 있습니다. 실제 회원 계정은 운영자가 별도로 준비합니다.
+운영자는 **설정 → 회원 승인 관리**에서 승인·거절·이용 중지를 처리합니다. **이메일과 이름은 가입자가 입력한 정보이므로 사칭할 수 있습니다.** 자동으로 표시되는 이메일 인증 상태도 소유 증명이 아닙니다. 승인 전에 기존 연락처 등 별도 경로로 본인을 확인하세요. 관리자 권한은 `approved/admin`, 변환 권한은 `approved`로 검사하며 이메일 주소·메타데이터를 근거로 자동 승인하지 않습니다. 첫 관리자 설정도 독립적으로 확인한 사용자 UUID를 명시해야 합니다. 기존 관리자와 회원의 상태는 변경하지 않습니다.
+
+인증 토큰은 HttpOnly·Secure·SameSite=Lax 쿠키에 보관합니다. 서버는 Supabase에서 로그인 신원을 확인하고 DB의 승인 상태를 검사합니다. 일반 회원에게 설정 버튼·키 입력창·남은 횟수 표시는 숨기며 서버 공용 키를 사용합니다. 모델 키와 Supabase 서버 키는 Git에서 제외된 `.env.local`에 보관합니다. Ubuntu 운영·재배포 절차는 [운영 문서](docs/UBUNTU_OPERATIONS.md)를 참고하세요.
 
 ## 비용 제한
 

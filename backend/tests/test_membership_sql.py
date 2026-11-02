@@ -3,6 +3,7 @@
 import json
 import os
 import subprocess
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -22,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class Database:
-    def __init__(self, container):
-        self.container = container
+    def __init__(self, container=None, *, psql=None):
+        self.psql = psql or ["docker", "exec", "-i", container, "psql"]
 
     def run(self, sql, *, role=None, user=None, fails=False):
         if role:
@@ -33,11 +34,7 @@ class Database:
             )
         result = subprocess.run(
             [
-                "docker",
-                "exec",
-                "-i",
-                self.container,
-                "psql",
+                *self.psql,
                 "-U",
                 "postgres",
                 "-XqAt",
@@ -68,6 +65,29 @@ class Database:
 
 @pytest.fixture(scope="module")
 def db():
+    # Optional extracted PostgreSQL binaries allow real SQL tests without Docker.
+    pg_bin = os.getenv("BRAIN_TEST_PG_BIN")
+    if pg_bin:
+        with tempfile.TemporaryDirectory(prefix="brain-sql-") as directory:
+            base = Path(directory)
+            data = base / "data"
+            subprocess.run([
+                str(Path(pg_bin) / "initdb"), "-D", str(data), "-U", "postgres",
+                "--auth=trust", "--no-locale", "--encoding=UTF8",
+            ], check=True, capture_output=True, timeout=30)
+            subprocess.run([
+                str(Path(pg_bin) / "pg_ctl"), "-D", str(data), "-l", str(base / "log"),
+                "-o", f"-c listen_addresses='' -c unix_socket_directories='{base}'", "-w", "start",
+            ], check=True, capture_output=True, timeout=30)
+            database = Database(psql=[str(Path(pg_bin) / "psql"), "-h", str(base)])
+            try:
+                initialize(database)
+                yield database
+            finally:
+                subprocess.run([str(Path(pg_bin) / "pg_ctl"), "-D", str(data),
+                                "-m", "immediate", "-w", "stop"],
+                               check=True, capture_output=True, timeout=15)
+        return
     name = f"brain-membership-test-{uuid4().hex[:8]}"
     subprocess.run(
         [
@@ -100,7 +120,14 @@ def db():
             if time.monotonic() > deadline:
                 raise AssertionError("Disposable PostgreSQL failed to start")
             time.sleep(0.1)
-        database.run("""
+        initialize(database)
+        yield database
+    finally:
+        subprocess.run(["docker", "stop", name], capture_output=True, timeout=15)
+
+
+def initialize(database):
+    database.run("""
             create role anon; create role authenticated; create role service_role bypassrls;
             create schema auth;
             create table auth.users(id uuid primary key, email text,
@@ -109,18 +136,16 @@ def db():
               select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid;
             $$;
         """)
-        for path in sorted((ROOT / "supabase/migrations").glob("*.sql")):
-            database.run(path.read_text())
-            database.run(path.read_text())  # Every upgrade is rerunnable.
-        yield database
-    finally:
-        subprocess.run(["docker", "stop", name], capture_output=True, timeout=15)
+    for path in sorted((ROOT / "supabase/migrations").glob("*.sql")):
+        database.run(path.read_text())
+        database.run(path.read_text())  # Every upgrade is rerunnable.
 
 
 @pytest.fixture(autouse=True)
 def members(db):
     # Some compatibility tests deliberately reinstall an older function version.
     db.run((ROOT / "supabase/migrations/202609280005_gpt_usage_reset.sql").read_text())
+    db.run((ROOT / "supabase/migrations/202610310001_password_only_membership.sql").read_text())
     db.run(f"""
       truncate private.brain_ai_charges;
       update private.brain_ai_budget set accounted_krw=0;
@@ -173,30 +198,23 @@ def test_ordinary_member_cannot_list_or_approve_anyone(db):
         )
 
 
-def test_admin_requires_confirmed_email_and_cannot_change_admin_accounts(db):
-    for user, expected in (
-        (UNCONFIRMED, "email confirmation required"),
-        (ADMIN, "admin accounts require dashboard management"),
-    ):
-        assert expected in db.run(
-            f"select public.brain_set_member_status('{user}','approved');",
-            role="authenticated",
-            user=ADMIN,
-            fails=True,
-        )
+def test_admin_can_approve_without_confirmed_email_but_cannot_change_admin_accounts(db):
+    assert approve(db, UNCONFIRMED) == {"id": UNCONFIRMED, "status": "approved"}
+    assert "admin accounts require dashboard management" in db.run(
+        f"select public.brain_set_member_status('{ADMIN}','approved');",
+        role="authenticated", user=ADMIN, fails=True,
+    )
     assert approve(db) == {"id": MEMBER, "status": "approved"}
     assert db.run("select count(*) from private.brain_approval_audit;") != "0"
 
 
-def test_admin_bootstrap_requires_verified_operator(db):
-    db.run(
-        f"update private.brain_members set role='member',status='pending' where user_id='{ADMIN}';"
-    )
+def test_admin_bootstrap_requires_independently_selected_uuid(db):
+    db.run(f"update private.brain_members set role='member',status='pending' "
+           f"where user_id='{ADMIN}';")
     bootstrap = (ROOT / "supabase/bootstrap_operator.sql").read_text()
-    db.run(bootstrap)
+    assert "explicit independently verified operator UUID required" in db.run(bootstrap, fails=True)
+    db.run(f"set brain.bootstrap_operator_id='{ADMIN}';\n" + bootstrap)
     assert db.rpc("brain_access", role="authenticated", user=ADMIN)["role"] == "admin"
-    db.run(f"update auth.users set email_confirmed_at=null where id='{ADMIN}';")
-    assert "confirmed operator account required" in db.run(bootstrap, fails=True)
 
 
 def test_reserved_request_reuses_result_and_cannot_cross_accounts_or_inputs(db):
@@ -585,3 +603,58 @@ def test_failed_or_missing_gpt_usage_is_unknown_not_free(db, failed):
     assert status["unconfirmedAttempts"] == 1
     assert status["usageRecordedAttempts"] == status["estimatedCostMicrousd"] == 0
     assert status["accountedKrw"] == 34
+
+
+@pytest.mark.parametrize("status", ["pending", "rejected", "suspended"])
+def test_unapproved_roles_cannot_access_admin_rpc_or_usage(db, status):
+    db.run(f"update private.brain_members set role='admin', status='{status}' "
+           f"where user_id='{UNCONFIRMED}';")
+    for sql in ["select public.brain_members();", "select public.brain_members_page();",
+                "select public.brain_budget_status();", "select public.brain_usage();",
+                f"select public.brain_set_member_status('{MEMBER}','approved');"]:
+        assert "insufficient_privilege" in db.run(
+            sql, role="authenticated", user=UNCONFIRMED, fails=True
+        )
+    assert db.reserve(user=UNCONFIRMED)["state"] == "denied"
+    assert budget_reserve(db, UNCONFIRMED, str(uuid4()))["state"] == "denied"
+
+
+def test_unconfirmed_pending_to_approved_can_reserve_and_revocation_blocks_budget(db):
+    assert db.rpc("brain_access", role="authenticated", user=UNCONFIRMED)["status"] == "pending"
+    assert db.reserve(user=UNCONFIRMED)["state"] == "denied"
+    approve(db, UNCONFIRMED)
+    request = str(uuid4())
+    assert db.reserve(user=UNCONFIRMED, request=request)["state"] == "reserved"
+    assert budget_reserve(db, UNCONFIRMED, request)["state"] == "reserved"
+    assert db.rpc("brain_usage", role="authenticated", user=UNCONFIRMED)["dailyUsed"] == 1
+    db.rpc("brain_set_member_status", f"'{UNCONFIRMED}','suspended'",
+           role="authenticated", user=ADMIN)
+    assert db.reserve(user=UNCONFIRMED, request=request)["state"] == "denied"
+    assert budget_reserve(db, UNCONFIRMED, request)["state"] == "denied"
+
+
+def test_password_only_upgrade_preserves_all_rows_and_is_rerunnable(db):
+    approve(db, UNCONFIRMED)
+    request = str(uuid4())
+    assert db.reserve(user=UNCONFIRMED, request=request)["state"] == "reserved"
+    assert budget_reserve(db, UNCONFIRMED, request)["state"] == "reserved"
+    db.rpc("brain_finish", f"'{UNCONFIRMED}','{request}'," + "'{\"saved\":\"historical\"}',false",
+           role="service_role")
+    tables = ["brain_members", "brain_jobs", "brain_ai_budget", "brain_ai_charges",
+              "brain_accounting_reset", "brain_approval_audit"]
+    def snapshot():
+        return [db.run(
+            "select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]') "
+            f"from private.{table} t;"
+        ) for table in tables]
+    before = snapshot()
+    for _ in range(2):
+        db.run((ROOT / "supabase/migrations/202610310001_password_only_membership.sql").read_text())
+    assert snapshot() == before
+    assert db.rpc("brain_auth_policy_ready", role="service_role") == {
+        "policy": "password_only_approval_v1", "ready": True,
+    }
+    for role in ["anon", "authenticated"]:
+        assert "permission denied" in db.run(
+            "select public.brain_auth_policy_ready();", role=role, user=UNCONFIRMED, fails=True
+        )

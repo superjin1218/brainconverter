@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .config import AppConfig
 from .conversion import ConversionCoordinator, pending_job
@@ -43,6 +45,12 @@ def create_app(
     application.state.active_conversions = 0
     membership = MembershipService(resolved_config, membership_transport)
     application.include_router(auth_router(membership))
+    if resolved_config.is_production and resolved_config.public_url:
+        application.add_middleware(
+            TrustedHostMiddleware,
+            allowed_hosts=[urlsplit(resolved_config.public_url).hostname, "127.0.0.1", "localhost"],
+            www_redirect=False,
+        )
 
     if resolved_config.environment == "development":
         application.include_router(local_provider_router(application))
@@ -54,20 +62,39 @@ def create_app(
 
     @application.middleware("http")
     async def security_headers(request: Request, call_next):
-        response = await call_next(request)
-        if request.url.path.startswith("/api/") or resolved_config.environment == "development":
-            response.headers["Cache-Control"] = "no-store"
+        public_origin = urlsplit(resolved_config.public_url)
+        if (
+            resolved_config.is_production
+            and public_origin.scheme == "https"
+            and request.url.hostname == public_origin.hostname
+            and request.url.scheme == "http"
+        ):
+            response = RedirectResponse(
+                str(request.url.replace(scheme="https", netloc=public_origin.netloc)),
+                status_code=308,
+            )
+        else:
+            response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "script-src 'self'; img-src 'self' data:; connect-src 'self'"
+            "script-src 'self'; img-src 'self' data:; connect-src 'self'; "
+            "base-uri 'none'; object-src 'none'; form-action 'self'; frame-ancestors 'none'"
         )
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        if resolved_config.is_production:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         return response
 
+    @application.get("/auth/callback", include_in_schema=False)
+    async def auth_callback():
+        return FileResponse(resolved_config.static_directory / "index.html")
+
     @application.get("/api/health")
-    async def health() -> dict[str, str]:
+    async def health() -> dict:
         service = application.state.harness_service
         status = current_provider_status(service.provider if service else None)
         return {
@@ -75,6 +102,7 @@ def create_app(
             "provider": status["provider"],
             "model": status["model"],
             "providerRevision": diagnostic_runtime()["providerSourceSha256"],
+            "conversionsEnabled": resolved_config.conversions_enabled,
         }
 
     @application.get("/api/provider")
@@ -87,6 +115,7 @@ def create_app(
         return {
             **current_provider_status(service.provider if service else None),
             "localKeyEntry": resolved_config.environment == "development",
+            "conversionsEnabled": resolved_config.conversions_enabled,
         }
 
     conversions = ConversionCoordinator(
@@ -137,6 +166,8 @@ def create_app(
         if resolved_config.auth_mode != "supabase":
             raise HTTPException(404)
         await membership.identify(request, admin=True)
+        if not resolved_config.conversions_enabled:
+            raise HTTPException(503, "현재 AI 변환과 연결 진단은 중지되어 있습니다.")
         try:
             provider = harness_service().provider
         except RuntimeError:

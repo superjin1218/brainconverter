@@ -14,6 +14,7 @@ class AppConfig:
     supabase_publishable_key: str = ""
     supabase_secret_key: str = field(default="", repr=False)
     public_url: str = ""
+    conversions_enabled: bool = True
 
     def __post_init__(self) -> None:
         if self.auth_mode not in {"none", "supabase"}:
@@ -31,6 +32,9 @@ class AppConfig:
         environment = os.getenv("APP_ENV", "production" if hosted else "development").lower()
         if hosted and environment != "production":
             raise ValueError("Vercel에서는 APP_ENV=production으로 설정하세요.")
+        conversions_enabled = os.getenv("CONVERSIONS_ENABLED", "true").strip().lower()
+        if conversions_enabled not in {"true", "false"}:
+            raise ValueError("CONVERSIONS_ENABLED는 true 또는 false로 설정하세요.")
         return cls(
             environment=environment,
             static_directory=Path(__file__).resolve().parent / "static",
@@ -39,4 +43,5 @@ class AppConfig:
             supabase_publishable_key=os.getenv("SUPABASE_PUBLISHABLE_KEY", ""),
             supabase_secret_key=os.getenv("SUPABASE_SECRET_KEY", ""),
             public_url=os.getenv("APP_PUBLIC_URL", "").rstrip("/"),
+            conversions_enabled=conversions_enabled == "true",
         )

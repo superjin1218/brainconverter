@@ -114,6 +114,10 @@ class ConversionCoordinator:
             member = await self._membership.identify(request, approved=True)
         elif self._config.auth_mode == "none":
             require_local_conversion(request)
+        if not self._config.conversions_enabled:
+            raise HTTPException(
+                503, "현재 AI 변환은 준비 중입니다. 회원가입과 로그인은 이용할 수 있습니다."
+            )
         self._state.active_conversions += 1
         owned_job = None
         try:

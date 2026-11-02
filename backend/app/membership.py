@@ -67,9 +67,11 @@ class MembershipService:
                 if response.status_code == 429:
                     raise HTTPException(429, "요청이 많습니다. 잠시 후 다시 시도하세요.")
                 if path.startswith("/auth/") and response.status_code in {400, 422}:
-                    raise HTTPException(400, "이메일·비밀번호와 이메일 인증 여부를 확인하세요.")
+                    raise HTTPException(
+                        400, "이메일과 비밀번호를 확인하세요. 비밀번호는 6~256자로 입력하세요."
+                    )
                 if path.endswith("/brain_set_member_status") and response.status_code == 400:
-                    raise HTTPException(400, "회원의 이메일 인증과 승인 상태를 확인하세요.")
+                    raise HTTPException(400, "회원의 승인 상태를 확인하세요.")
                 raise HTTPException(503, "회원 시스템에 연결할 수 없습니다. 운영자에게 문의하세요.")
             return response.json() if response.content else {}
         except (httpx.HTTPError, ValueError):
@@ -123,8 +125,6 @@ class MembershipService:
             UUID(user["id"])
         except (TypeError, KeyError, ValueError):
             raise HTTPException(401, "다시 로그인하세요.") from None
-        if not user.get("email_confirmed_at"):
-            raise HTTPException(403, "이메일 인증을 완료한 뒤 로그인하세요.")
         access = await self.rpc("brain_access", token)
         if not isinstance(access, dict):
             raise HTTPException(503, "회원 승인 정보를 확인하지 못했습니다.")
@@ -186,12 +186,12 @@ def auth_router(service: MembershipService) -> APIRouter:
             email, password = data.get("email"), data.get("password")
             if not isinstance(email, str) or not re.fullmatch(r"[^\s@]{1,64}@[^\s@]{1,250}", email):
                 raise ValueError()
-            if not isinstance(password, str) or not password or len(password) > 256:
+            if not isinstance(password, str) or not 6 <= len(password) <= 256:
                 raise ValueError()
             return {"email": email.strip().lower(), "password": password}, data
         except (ValueError, AttributeError):
             # Never reflect a password through Pydantic validation errors.
-            raise HTTPException(400, "올바른 이메일과 비밀번호를 입력하세요.") from None
+            raise HTTPException(400, "올바른 이메일과 6~256자 비밀번호를 입력하세요.") from None
 
     @router.get("/api/auth/config")
     async def auth_config():
@@ -203,15 +203,24 @@ def auth_router(service: MembershipService) -> APIRouter:
         name = data.get("displayName", "")
         if not isinstance(name, str) or not 1 <= len(name.strip()) <= 80:
             raise HTTPException(400, "이름을 1~80자로 입력하세요.")
+        # Do not send signup emails while dashboard settings use the old policy.
+        settings = await service.request("GET", "/auth/v1/settings")
+        if (
+            settings.get("mailer_autoconfirm") is not True
+            or settings.get("disable_signup") is not False
+        ):
+            raise HTTPException(503, "회원가입 설정을 적용 중입니다. 잠시 후 다시 시도하세요.")
         payload["data"] = {"display_name": name.strip()}
         await service.request(
             "POST",
             "/auth/v1/signup",
             body=payload,
-            params={"redirect_to": config.public_url} if config.public_url else None,
         )
-        # Always require a separate login after email verification; do not leak sessions.
-        return {"message": "인증 메일을 확인한 뒤 로그인하세요. 운영자 승인 후 이용할 수 있습니다."}
+        # Discard Supabase's signup session; the member signs in with a password.
+        return {"message": (
+            "회원가입이 완료되었습니다. 바로 로그인할 수 있습니다. "
+            "운영자 승인 후 변환 기능을 이용할 수 있습니다."
+        )}
 
     @router.post("/api/auth/login")
     async def login(request: Request, response: Response):
@@ -270,8 +279,13 @@ def auth_router(service: MembershipService) -> APIRouter:
                 revoked = True
         except HTTPException:
             revoked = False
-        response.delete_cookie(ACCESS_COOKIE, path="/api", secure=config.is_production)
-        response.delete_cookie(REFRESH_COOKIE, path="/api/auth", secure=config.is_production)
+        response.delete_cookie(
+            ACCESS_COOKIE, path="/api", secure=config.is_production, httponly=True, samesite="lax"
+        )
+        response.delete_cookie(
+            REFRESH_COOKIE, path="/api/auth", secure=config.is_production,
+            httponly=True, samesite="lax",
+        )
         return {
             "sessionRevoked": revoked,
             "message": "로그아웃했습니다." if revoked else (

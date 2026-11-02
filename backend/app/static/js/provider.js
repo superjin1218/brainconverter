@@ -77,6 +77,9 @@ export class LocalProviderPanel {
     const wasConnected = (this.state?.provider === "openai") && this.state.keyConfigured;
     const state = await this.refresh();
     if (!state) throw new Error("AI 연결 상태를 확인하지 못했습니다. 새로고침해 주세요.");
+    if (state.conversionsEnabled === false) {
+      throw new Error("현재 AI 변환은 준비 중입니다. 회원가입과 로그인은 이용할 수 있습니다.");
+    }
     const connected = (state.provider === "openai") && state.keyConfigured;
     if (wasConnected && !connected) {
       this.api.clearPending();
@@ -95,12 +98,17 @@ export class LocalProviderPanel {
     document.querySelector("#provider-chip").hidden = !this.accessAllowed;
     const connected = (state.provider === "openai") && state.keyConfigured;
     const mock = state.provider === "mock";
+    const paused = state.conversionsEnabled === false;
     this.panel.classList.toggle("connected", connected);
     const local = state.localKeyEntry === true;
     const canEdit = local && this.allowLocalEntry;
     document.querySelector("#provider-title").textContent = local ? "로컬 AI 연결" : "AI 연결";
     document.querySelector("#provider-mode").textContent = connected ? "실제 AI · 키 설정됨" : "AI 미연결";
     document.querySelector("#provider-chip").textContent = connected ? "실제 AI 모드" : mock ? "모의 모드 · AI 미사용" : "API 키 필요";
+    if (paused) {
+      document.querySelector("#provider-mode").textContent = "AI 변환 준비 중";
+      document.querySelector("#provider-chip").textContent = "AI 변환 준비 중";
+    }
     document.querySelector("#provider-description").textContent = local
       ? connected
         ? "이 로컬 서버에 키가 등록되어 있습니다. 키의 유효성은 실제 변환에서 확인합니다."
@@ -109,6 +117,10 @@ export class LocalProviderPanel {
         ? "서버에 등록된 공용 키를 자동으로 사용합니다. 키의 유효성은 실제 변환에서 확인합니다."
         : "서버의 AI 키 설정을 확인하세요. 저장한 환경변수는 다음 배포부터 적용됩니다.";
     document.querySelector("#submit-button span").textContent = connected ? "AI로 코드 변환" : mock ? "모의 변환해 보기" : "전략 변환하기";
+    if (paused) {
+      document.querySelector("#provider-description").textContent = "현재 회원가입과 로그인을 이용할 수 있습니다. AI 변환은 아직 준비 중입니다.";
+      document.querySelector("#submit-button span").textContent = "AI 변환 준비 중";
+    }
     this.form.hidden = !canEdit || connected;
     this.disconnectButton.hidden = !canEdit || !connected;
     document.querySelector("#provider-key-note").hidden = !canEdit;

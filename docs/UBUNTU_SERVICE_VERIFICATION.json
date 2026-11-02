@@ -1,0 +1,38 @@
+{
+  "observed_at_utc": "2026-10-28T05:42:33.074972+00:00",
+  "test": "intentional SIGKILL of verified owned auth-only application process",
+  "before": {
+    "Restart": "on-failure",
+    "MainPID": "47259",
+    "NRestarts": "0",
+    "ActiveState": "active",
+    "SubState": "running",
+    "UnitFileState": "enabled"
+  },
+  "after": {
+    "Restart": "on-failure",
+    "MainPID": "48502",
+    "NRestarts": "1",
+    "ActiveState": "active",
+    "SubState": "running",
+    "UnitFileState": "enabled"
+  },
+  "health_after_restart": true,
+  "recovery_seconds": 5.86,
+  "auto_restart_verified": true,
+  "real_host_reboot_tested": false,
+  "runtime_security": {
+    "service_uid_matches_operator": true,
+    "openai_key_absent": true,
+    "production": true,
+    "supabase_auth": true,
+    "ai_disabled": true,
+    "public_url_correct": true,
+    "installed_unit_matches_source": true,
+    "installed_unit_root_owned": true,
+    "installed_unit_mode_644": true,
+    "env_file_mode_600": true,
+    "no_new_privileges": true,
+    "no_effective_capabilities": true
+  }
+}

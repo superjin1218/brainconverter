@@ -56,7 +56,7 @@ async function dashboard(t, state = realState, member = undefined, localAvailabl
     if (intercepted) return intercepted;
     if (url === "/api/auth/config") return response({enabled: member !== undefined, configured: true});
     if (url === "/api/auth/me") return response(control.member || {detail: "로그인하세요."}, control.member ? 200 : 401);
-    if (url.startsWith("/api/admin/members?") || url === "/api/admin/members") return response({members: [{id: "member-id", email: "member@example.test", displayName: "신청자", status: "pending", role: "member"}], nextCursor: null});
+    if (url.startsWith("/api/admin/members?") || url === "/api/admin/members") return response({members: [{id: "member-id", email: "member@example.test", displayName: "신청자", status: "pending", role: "member", emailConfirmed: false}], nextCursor: null});
     if (url === "/api/admin/budget") return response({
       limitKrw: 20000, accountedKrw: 34, stopped: false, allowancePerAttemptKrw: 34,
       estimatedCostMicrousd: 954, attempts: 1, unconfirmedAttempts: 0,
@@ -70,7 +70,7 @@ async function dashboard(t, state = realState, member = undefined, localAvailabl
       control.authCalls.push({url, options});
       if (url.endsWith("refresh")) return response({detail: "로그인하세요."}, 401);
       if (url.endsWith("logout")) control.member = null;
-      return response({message: "이메일 인증 후 승인 대기"});
+      return response({message: "회원가입이 완료되었습니다. 바로 로그인할 수 있습니다. 운영자 승인 후 이용할 수 있습니다."});
     }
     if (url === "/api/local/provider") {
       if (control.stateError) throw control.stateError;
@@ -287,7 +287,7 @@ test("signup sends credentials once and clears the visible password", async t =>
   assert.deepEqual(JSON.parse(call.options.body), {email: "member@example.test", password: "123456", displayName: "신청자"});
   assert.equal(ui.element("#auth-password").value, "");
   assert.equal(ui.element("#dashboard").hidden, true);
-  assert.match(ui.element("#auth-feedback").textContent, /이메일 인증/);
+  assert.match(ui.element("#auth-feedback").textContent, /바로 로그인/);
 });
 
 test("an approved operator can send an explicit approval from member administration", async t => {
@@ -299,6 +299,7 @@ test("an approved operator can send an explicit approval from member administrat
   assert.equal(ui.element("#provider-form").hidden, true);
   const row = ui.element("#members-list").children[0];
   const button = row.children[1].children.find(button => button.textContent === "승인");
+  assert.equal(Boolean(button.disabled), false);
   await button.emit("click");
   const call = ui.control.authCalls.find(call => call.url === "/api/admin/members/member-id");
   assert.equal(JSON.parse(call.options.body).status, "approved");
@@ -566,6 +567,8 @@ function browserSession(t) {
   const events = new Map();
   const values = new Map();
   globalThis.window = {
+    location: {hash: "", search: "", pathname: "/"},
+    history: {replaceState() {}},
     addEventListener: (name, callback) => events.set(name, callback),
     localStorage: {getItem: key => values.get(key) || null, setItem: (key, value) => values.set(key, value)},
   };
@@ -574,6 +577,25 @@ function browserSession(t) {
     notify: () => events.get("storage")({key: "brain-session-change"}),
     restore: () => events.get("pageshow")({persisted: true})};
 }
+
+test("a paused production provider cannot send a conversion even with a configured key", async t => {
+  const ui = await dashboard(t, {...realState, conversionsEnabled: false}, {id: "a", status: "approved", role: "member"}, false);
+  await ui.submit();
+  assert.equal(ui.control.calls.length, 0);
+  assert.match(ui.element("#provider-chip").textContent, /준비 중/);
+  assert.match(ui.element("#submit-button span").textContent, /준비 중/);
+});
+
+test("the legacy link login message survives an unavailable session refresh", async t => {
+  browserSession(t);
+  window.location.hash = "#error=access_denied&error_code=otp_expired&error_description=dummy-secret";
+  let cleared = false;
+  window.history.replaceState = () => { cleared = true; };
+  const ui = await dashboard(t, realState, null, false);
+  assert.equal(cleared, true);
+  assert.match(ui.element("#auth-feedback").textContent, /이메일과 비밀번호로 로그인/);
+  assert.equal(ui.element("#auth-feedback").textContent.includes("dummy-secret"), false);
+});
 
 test("another tab's logout erases this tab's private DOM", async t => {
   const browser = browserSession(t);
@@ -647,4 +669,40 @@ test("OpenAI with no key blocks conversion before the paid endpoint", async t =>
   await ui.submit();
   assert.equal(ui.control.calls.length, 0);
   assert.match(ui.element("#error-message").textContent, /키가 설정되지/);
+});
+
+
+for (const mode of ["signup", "login"]) {
+  for (const password of ["", "12345"]) {
+    test(`${mode} rejects a short password before sending credentials`, async t => {
+      const ui = await dashboard(t, realState, null);
+      await ui.element(`#auth-${mode}-tab`).emit("click");
+      ui.element("#auth-email").value = "member@example.test";
+      ui.element("#auth-password").value = password;
+      await ui.element("#auth-form").emit("submit");
+      assert.equal(ui.control.authCalls.some(call => call.url.endsWith(mode)), false);
+      assert.match(ui.element("#auth-feedback").textContent, /6~256자/);
+      assert.equal(ui.element("#auth-password").value, "");
+    });
+  }
+}
+
+test("signup then login shows approval waiting and enables conversion only after approval", async t => {
+  const ui = await dashboard(t, realState, null);
+  await ui.element("#auth-signup-tab").emit("click");
+  ui.element("#auth-email").value = "member@example.test";
+  ui.element("#auth-password").value = "abcdef";
+  await ui.element("#auth-form").emit("submit");
+  ui.control.member = {id: "new-member", status: "pending", role: "member", email: "member@example.test"};
+  ui.element("#auth-password").value = "abcdef";
+  await ui.element("#auth-form").emit("submit");
+  assert.equal(ui.element("#auth-waiting-card").hidden, false);
+  assert.equal(ui.element("#dashboard").hidden, true);
+  await ui.submit();
+  assert.equal(ui.control.calls.length, 0);
+  ui.control.member = {...ui.control.member, status: "approved"};
+  await ui.element("#auth-refresh").emit("click");
+  assert.equal(ui.element("#dashboard").hidden, false);
+  await ui.submit();
+  assert.equal(ui.control.calls.length, 1);
 });

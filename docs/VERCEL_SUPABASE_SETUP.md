@@ -1,3 +1,5 @@
+> 현재 인증 정책은 이메일 인증 없는 공개 회원가입과 관리자 승인 방식입니다. 아래 문서는 이전 Vercel 구축 기록입니다. 인증 설정·SMTP·첫 관리자 설정은 [현재 운영 문서](UBUNTU_OPERATIONS.md)의 지침이 우선합니다. 특히 Confirm email OFF, 최소 6자, 문자 조합 요구 없음, Custom SMTP OFF를 적용하고 새 정책 SQL을 실행하세요. 이메일 주소만으로 첫 관리자를 자동 지정하지 않습니다.
+
 # Vercel + Supabase 회원 사이트 설정
 
 현재 운영 사이트는 OpenAI GPT-5.4 mini 전용입니다. GPT 전환은 배포됐으며 키·배포 명령은 [OPENAI_DEPLOYMENT.md](OPENAI_DEPLOYMENT.md)를 따릅니다. 아래 초기 구축 확인값은 당시 기록이고 최신 변경은 [SESSION_CONTEXT.md](SESSION_CONTEXT.md)를 우선합니다.

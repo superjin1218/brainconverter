@@ -1,4 +1,5 @@
 import {budgetSummary} from "./accounting.js";
+import {clearLegacyAuthLink} from "./auth-callback.js";
 
 export class MembershipPanel {
   constructor(api, onChange) {
@@ -11,6 +12,8 @@ export class MembershipPanel {
     this.memberListSequence = 0;
     this.nextCursor = null;
     this.mode = "login";
+    this.confirmation = typeof window === "undefined" ? Promise.resolve(null)
+      : clearLegacyAuthLink(window.location, window.history);
     this.panel = document.querySelector("#auth-panel");
     this.form = document.querySelector("#auth-form");
     this.feedback = document.querySelector("#auth-feedback");
@@ -93,6 +96,9 @@ export class MembershipPanel {
       this.render();
       this.onChange();
       this.message(error.message);
+    } finally {
+      const confirmationMessage = await this.confirmation;
+      if (revision === this.revision && confirmationMessage) this.message(confirmationMessage);
     }
   }
 
@@ -164,6 +170,10 @@ export class MembershipPanel {
         password: document.querySelector("#auth-password").value,
         ...(mode === "signup" ? {displayName: document.querySelector("#auth-name").value.trim()} : {}),
       };
+      const passwordLength = [...payload.password].length;
+      if (passwordLength < 6 || passwordLength > 256) {
+        throw new Error("비밀번호는 6~256자로 입력하세요. 문자 조합 제한은 없습니다.");
+      }
       const result = await this.api.auth(mode, payload);
       if (revision !== this.revision) return;
       document.querySelector("#auth-password").value = "";
@@ -265,7 +275,7 @@ export class MembershipPanel {
       row.className = "member-row";
       const info = document.createElement("div");
       const name = document.createElement("b");
-      name.textContent = `${member.displayName || "회원"} · ${labels[member.status] || member.status}${member.emailConfirmed === false ? " · 이메일 미인증" : ""}`;
+      name.textContent = `${member.displayName || "회원"} · ${labels[member.status] || member.status}`;
       const email = document.createElement("small");
       email.textContent = member.email;
       info.append(name, email);
@@ -279,7 +289,6 @@ export class MembershipPanel {
           button.type = "button";
           button.className = "copy-button";
           button.textContent = label;
-          button.disabled = status === "approved" && member.emailConfirmed === false;
           button.addEventListener("click", async () => {
             if (!current()) return;
             button.disabled = true;
