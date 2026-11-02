@@ -167,6 +167,19 @@ test("an explicit mock request is guarded and labelled as mock", async t => {
   assert.equal(ui.element("#result-status").textContent, "모의 변환 완료");
 });
 
+test("catalog checks do not claim an unperformed BRAIN execution succeeded", async t => {
+  const ui = await dashboard(t);
+  ui.control.result.validation = {
+    catalogFieldsChecked: true, fieldTypesChecked: true, brainExecutionChecked: null,
+  };
+  await ui.submit();
+  const rows = ui.element("#validation-list").children;
+  assert.match(rows[0].textContent, /필드 카탈로그 검사/);
+  assert.match(rows[1].textContent, /자료형 검사/);
+  assert.equal(rows[2].textContent, "BRAIN 실행: 미확인");
+  assert.equal(rows[2].className, "unchecked");
+});
+
 test("draft explanations render as text and choices require a new explicit conversion", async t => {
   const ui = await dashboard(t);
   const settings = {region: "USA", universe: "TOP500", delay: 1, neutralization: "SECTOR",

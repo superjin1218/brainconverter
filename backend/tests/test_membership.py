@@ -294,6 +294,23 @@ def test_approved_member_converts_once_and_uses_database_cache(site):
     assert state["aiCalls"] == 1
 
 
+def test_cached_invalid_fields_are_blocked_on_resubmit_and_job_poll_without_new_ai(site):
+    client, state, _ = site
+    state["status"] = "approved"
+    connect(client)
+    request = str(uuid4())
+    assert convert(client, headers={"Idempotency-Key": request}).status_code == 200
+    state["cached"]["fastExpression"] = "rank(roe)"
+    state["cached"]["catalogRevision"] = None
+    state["reservation"] = "cached"
+    for result in [convert(client, headers={"Idempotency-Key": request}),
+                   client.get(f"/api/jobs/{request}")]:
+        assert result.status_code == 200
+        assert result.json()["status"] == "REJECTED"
+        assert result.json()["fastExpression"] is None
+    assert state["aiCalls"] == 1
+
+
 @pytest.mark.parametrize(
     "reservation,code",
     [("running", 202), ("queued", 202), ("limited", 429), ("denied", 403), ("conflict", 409)],

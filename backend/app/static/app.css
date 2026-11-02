@@ -190,6 +190,7 @@ select, input {
 footer { width: min(1460px, calc(100% - 40px)); margin: 0 auto 30px; display: flex; justify-content: space-between; gap: 20px; color: #68768b; font-size: 12px; }
 [hidden] { display: none !important; }
 .validation-list li.failed::before { content: "×"; color: var(--danger); }
+.validation-list li.unchecked::before { content: "—"; color: var(--amber); background: rgba(255, 196, 107, .09); }
 .copy-button:disabled { opacity: .4; cursor: not-allowed; }
 #intent-mapping { padding-left: 18px; font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
 #refresh-usage { margin-top: 12px; }

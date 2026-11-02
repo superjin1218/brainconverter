@@ -16,7 +16,7 @@ COMPARISONS = {">": "초과", ">=": "이상", "<": "미만", "<=": "이하"}
 
 def explain_strategy(ir: StrategyIR, settings: dict) -> str:
     signal = ir.signal
-    field = FIELD_NAMES[signal.field]
+    field = FIELD_NAMES.get(signal.field, signal.field)
     if signal.operation == "return":
         basis = (
             f"현재 종가를 {signal.window}거래일 전 종가로 나눈 뒤 1을 빼서 "
@@ -39,7 +39,7 @@ def explain_strategy(ir: StrategyIR, settings: dict) -> str:
     if ir.entry.enabled:
         entry = ir.entry
         basis += (
-            f" {FIELD_NAMES[entry.field]}이 최근 {entry.window}거래일 평균의 "
+            f" {FIELD_NAMES.get(entry.field, entry.field)}이 최근 {entry.window}거래일 평균의 "
             f"{entry.multiplier:g}배 {COMPARISONS[entry.comparator]}일 때 점수를 갱신하고, "
             "조건을 충족하지 않으면 직전 값을 유지합니다."
         )
@@ -54,7 +54,7 @@ def explain_strategy(ir: StrategyIR, settings: dict) -> str:
 def strategy_sentence(ir: StrategyIR) -> str:
     """A fresh editable description of the selected IR, preserving the entry condition."""
     signal = ir.signal
-    field = FIELD_NAMES[signal.field]
+    field = FIELD_NAMES.get(signal.field, signal.field)
     if signal.operation == "return":
         family = "반전" if signal.direction == "down" else "모멘텀"
         sentence = f"최근 {signal.window}일 수익률 기준 {family} 전략."
@@ -71,7 +71,7 @@ def strategy_sentence(ir: StrategyIR) -> str:
     if ir.entry.enabled:
         entry = ir.entry
         sentence += (
-            f" {FIELD_NAMES[entry.field]}이 최근 {entry.window}일 평균의 "
+            f" {FIELD_NAMES.get(entry.field, entry.field)}이 최근 {entry.window}일 평균의 "
             f"{entry.multiplier:g}배 {COMPARISONS[entry.comparator]}일 때만 점수를 갱신한다."
         )
     return sentence

@@ -5,12 +5,66 @@ from __future__ import annotations
 import ast
 import re
 
+from .brain_catalog import get_catalog
 from .draft_compiler import GROUPS, DraftCompiler, compile_draft, expression_signature
 from .models import DraftIR, IntentIR, IntentMetric
 
+RATIO_CONCEPTS = {
+    "총자산": ("assets", "total"),
+    "총부채": ("liabilities", "total"),
+    "자기자본": ("equity",),
+    "매출": ("sales", "revenue"),
+    "순이익": ("net", "income"),
+}
+
+
+def _ratio_source_error(metric: IntentMetric) -> str | None:
+    if metric.operation != "ratio":
+        return None
+    terms = "|".join(RATIO_CONCEPTS)
+    match = re.search(f"({terms})\\s*대비\\s*({terms})", metric.source)
+    if match is None:
+        return None
+
+    def matches(identifier, concept):
+        description = get_catalog().field(identifier).description.lower()
+        words = RATIO_CONCEPTS[concept]
+        if concept == "매출":
+            return any(word in description for word in words)
+        return all(word in description for word in words) and not (
+            concept in {"총자산", "총부채"} and "current" in description
+        )
+
+    denominator, numerator = match.groups()
+    if not matches(metric.field, numerator) or not matches(metric.reference, denominator):
+        return "'A 대비 B'는 B/A입니다. 분자·분모의 필드 설명과 요청한 재무 지표가 다릅니다."
+    return None
+
+
+def _field_value(identifier: str, aggregation: str) -> str:
+    field = get_catalog().field(identifier)
+    if field.type == "VECTOR":
+        if aggregation not in {"avg", "sum"}:
+            raise ValueError(f"VECTOR 필드는 avg 또는 sum 집계가 필요합니다: {identifier}")
+        return f"vec_{aggregation}({identifier})"
+    if field.type != "MATRIX" or aggregation != "none":
+        raise ValueError(f"필드 자료형과 집계 방법이 맞지 않습니다: {identifier}")
+    return identifier
+
 
 def measurement(metric: IntentMetric) -> str:
-    field, days, other = metric.field, metric.window, metric.reference
+    if metric.operation == "expression":
+        compiler = DraftCompiler()
+        result = compiler.compile(metric.formula)
+        if metric.field not in compiler.fields:
+            raise ValueError("복합 측정식에 선언한 주 데이터 필드가 없습니다.")
+        if compiler.operators & {"rank", "group_rank", "group_neutralize", "trade_when", "if_else"}:
+            raise ValueError("복합 측정식 안에 점수 순위·조건부 점수를 숨길 수 없습니다.")
+        return result.code
+    field = _field_value(metric.field, metric.aggregation)
+    days = metric.window
+    other = (_field_value(metric.reference, metric.referenceAggregation)
+             if metric.reference is not None else None)
     if metric.operation == "raw":
         return field
     if metric.operation == "return":
@@ -67,6 +121,14 @@ def source_evidence_errors(strategy: str, ir: IntentIR) -> list[str]:
     if re.search(r"(?:같은|동일한?|동종)\s*(?:업종|산업)|industry.relative", strategy, re.I):
         if not any(m.group != "none" for m in ir.metrics):
             errors.append("명시한 동종업계 비교가 빠졌습니다.")
+    for match in re.finditer(
+        r"[^.。\n]*(?:뺀|빼고|차이를)[^.。\n]*(?:나눈|나눠|나누어)[^.。\n]*", strategy,
+    ):
+        # One explicitly chained arithmetic request must not become independent
+        # ranked preferences. This reproduces an observed live-model failure.
+        components = [m for m in ir.metrics if m.source.strip() in match.group()]
+        if len(components) != 1 or components[0].operation != "expression":
+            errors.append("차이를 구한 뒤 나누는 계산은 하나의 복합 측정식으로 보존해야 합니다.")
     return errors
 
 
@@ -130,6 +192,22 @@ def compile_intent(strategy: str, ir: IntentIR, settings: dict):
         return None, [ir.reason or "현재 데이터로 가설을 표현하지 못했습니다."], {}
     if not ir.metrics:
         return None, ["가설을 측정할 기준이 없습니다."], {}
+    try:
+        get_catalog().check_scope(settings)
+        for component in ir.metrics:
+            compiler = DraftCompiler()
+            compiler.compile(measurement(component))
+            if error := _ratio_source_error(component):
+                raise ValueError(error)
+            if re.search(r"뉴스|(?<![a-z])news(?![a-z])", component.source, re.I):
+                if not any(get_catalog().field(name).category == "news"
+                           or "news" in get_catalog().field(name).description.lower()
+                           for name in compiler.fields):
+                    raise ValueError(
+                        "뉴스 신호를 뉴스 근거가 없는 다른 데이터로 대체할 수 없습니다."
+                    )
+    except ValueError as exc:
+        return None, [str(exc)], {}
     errors = source_evidence_errors(strategy, ir)
     if errors:
         return None, errors, {}

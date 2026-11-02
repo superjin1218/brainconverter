@@ -185,7 +185,9 @@ def validate_source_numbers(strategy: str, expression: str) -> list[str]:
     numbers = {Decimal(n) for n in re.findall(r"(?<![\w.])\d+(?:\.\d+)?", expression)}
     if re.search(r"\breturns\b", expression):
         numbers.add(Decimal(1))  # The returns field already represents a one-day return.
-    for number in re.findall(r"(?<![\d.])\d+(?:\.\d+)?", strategy_without_settings):
+    for number in re.findall(
+        r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?(?![A-Za-z0-9_.])", strategy_without_settings
+    ):
         if Decimal(number) not in numbers:
             errors.append(f"전략의 숫자 {number}이 컴파일 결과에서 사라졌습니다.")
     return errors

@@ -17,8 +17,11 @@ const VALIDATION_LABELS = {
   jsonValid: "JSON 형식",
   schemaValid: "Strategy IR 스키마",
   sourceRequirementsPreserved: "명시 조건 검사",
-  compilePassed: "FASTEXPR 컴파일",
+  compilePassed: "표현식 구문 검사",
   intentPlanChecked: "선호 방향·원문 근거 검사",
+  catalogFieldsChecked: "BRAIN 필드 카탈로그 검사",
+  fieldTypesChecked: "필드 자료형 검사",
+  brainExecutionChecked: "BRAIN 실행 확인",
 };
 
 export class DashboardView {
@@ -190,6 +193,13 @@ export class DashboardView {
     const list = this.root.querySelector("#validation-list");
     list.replaceChildren();
     for (const [key, passed] of Object.entries(validation)) {
+      if (key === "brainExecutionChecked" && passed == null) {
+        const item = document.createElement("li");
+        item.className = "unchecked";
+        item.textContent = "BRAIN 실행: 미확인";
+        list.append(item);
+        continue;
+      }
       if (passed == null) continue;
       const item = document.createElement("li");
       if (!passed) item.className = "failed";

@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
+from .brain_catalog import BrainCatalog, get_catalog
 from .compiler import validate_source_numbers
-from .data_fields import is_data_field
 from .models import DraftIR
 
 FIELDS = {
@@ -22,6 +22,7 @@ TIME_FUNCTIONS = {
     "ts_delay": "이전 값", "ts_delta": "변화량", "ts_mean": "평균",
     "ts_sum": "합계", "ts_std_dev": "표준편차(변동성)",
     "ts_min": "최솟값", "ts_max": "최댓값", "ts_rank": "기간 내 순위",
+    "ts_backfill": "결측값 이전 관측치 채우기",
 }
 BINARY = {ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/"}
 COMPARISONS = {ast.Gt: ">", ast.GtE: ">=", ast.Lt: "<", ast.LtE: "<="}
@@ -60,10 +61,12 @@ def expression_signature(node: ast.AST):
 
 
 class DraftCompiler:
-    def __init__(self):
+    def __init__(self, catalog: BrainCatalog | None = None):
+        self.catalog = catalog if catalog is not None else get_catalog()
         self.steps: list[dict[str, str]] = []
         self.windows: set[int] = set()
         self.fields: set[str] = set()
+        self.operators: set[str] = set()
         self.tree: ast.Expression | None = None
 
     def compile(
@@ -87,11 +90,12 @@ class DraftCompiler:
         if depth > 16:
             raise ValueError("전략 식의 중첩이 너무 깊습니다.")
         if isinstance(node, ast.Name):
-            if is_data_field(node.id):
-                self.fields.add(node.id)
-                return CompiledNode(node.id, FIELDS.get(node.id, node.id), "series")
-            if node.id in GROUPS:
-                return CompiledNode(node.id, GROUPS[node.id], "group")
+            field = self.catalog.field(node.id)
+            self.fields.add(node.id)
+            kind = {"MATRIX": "series", "VECTOR": "vector", "GROUP": "group"}.get(field.type)
+            if kind is None:
+                raise ValueError(f"숫자 신호에 사용할 수 없는 필드 자료형입니다: {node.id}")
+            return CompiledNode(node.id, FIELDS.get(node.id, GROUPS.get(node.id, node.id)), kind)
         if isinstance(node, ast.Constant) and type(node.value) in {int, float}:
             if abs(node.value) > 1_000_000 or not math.isfinite(node.value):
                 raise ValueError("숫자가 허용 범위를 벗어났습니다.")
@@ -143,7 +147,13 @@ class DraftCompiler:
         return days
 
     def _call(self, name: str, args: list[CompiledNode]) -> CompiledNode:
+        if name not in self.catalog.operators:
+            raise ValueError(f"BRAIN 카탈로그에서 확인되지 않은 연산자입니다: {name}")
+        self.operators.add(name)
         code = f"{name}({', '.join(arg.code for arg in args)})"
+        if name in {"vec_avg", "vec_sum"} and len(args) == 1 and args[0].kind == "vector":
+            action = "벡터 평균" if name == "vec_avg" else "벡터 합계"
+            return CompiledNode(code, f"{args[0].meaning}의 {action}", "series")
         if name in {"rank", "abs"} and len(args) == 1 and args[0].kind == "series":
             suffix = "종목 간 상대 순위" if name == "rank" else "절댓값"
             return CompiledNode(code, f"({args[0].meaning})의 {suffix}", "series")
@@ -232,6 +242,10 @@ def compile_draft(strategy: str, ir: DraftIR, settings: dict) -> tuple[str | Non
         return None, ["가설 설명 또는 개선 선택지가 누락됐습니다."], {}
     compiler = DraftCompiler()
     try:
+        compiler.catalog.check_scope(settings)
+    except ValueError as exc:
+        return None, [str(exc)], {}
+    try:
         result = compiler.compile(ir.expression)
     except ValueError as exc:
         return None, [str(exc)], {}
@@ -247,11 +261,11 @@ def compile_draft(strategy: str, ir: DraftIR, settings: dict) -> tuple[str | Non
     assumptions.append(
         "AI가 선택한 측정 방법은 가설을 시험하기 위한 초안이며 성과를 확인하지 않았습니다."
     )
-    model_fields = sorted(compiler.fields - FIELDS.keys())
+    model_fields = sorted(compiler.fields - FIELDS.keys() - GROUPS.keys())
     if model_fields:
         assumptions.append(
-            "AI가 선택한 데이터 필드 " + ", ".join(model_fields)
-            + ": BRAIN에서 제공 여부·자료형·사용 권한을 확인해야 합니다."
+            "카탈로그에서 ID·자료형을 검사한 필드: " + ", ".join(model_fields)
+            + ". 현재 BRAIN 계정 권한과 실행 성공은 별도 확인이 필요합니다."
         )
     return result.code, [], {
         "strategyExplanation": f"{ir.hypothesis}\n코드의 계산: {result.meaning}. "

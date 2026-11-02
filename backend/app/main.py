@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from .cached_results import recheck_cached
 from .config import AppConfig
 from .conversion import ConversionCoordinator, pending_job
 from .local_provider import local_provider_router
@@ -139,7 +140,7 @@ def create_app(
         if result.get("state") in {"running", "queued"}:
             return pending_job(result)
         if result.get("state") == "cached":
-            return ConversionResponse.model_validate(result["result"])
+            return recheck_cached(ConversionResponse.model_validate(result["result"]))
         raise HTTPException(
             409, "이전 요청이 실패했거나 만료됐습니다. 새 요청으로 다시 시도하세요."
         )

@@ -11,6 +11,7 @@ from uuid import UUID
 from fastapi import HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from .cached_results import recheck_cached
 from .config import AppConfig
 from .local_provider import require_local_conversion
 from .membership import MembershipService, same_origin
@@ -50,7 +51,7 @@ class MemberJob:
         )
         state = reserved.get("state") if isinstance(reserved, dict) else None
         if state == "cached":
-            return ConversionResponse.model_validate(reserved["result"])
+            return recheck_cached(ConversionResponse.model_validate(reserved["result"]))
         if state in {"running", "queued"}:
             return pending_job(reserved)
         if state != "reserved":
