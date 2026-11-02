@@ -66,7 +66,7 @@ async def test_unnamed_hypothesis_can_use_composed_measurements(strategy, expres
 @pytest.mark.parametrize("expression", [
     "__import__('os').system('echo unsafe')", "close.__class__", "close[0]",
     "[close for x in volume]", "lambda: close", "close ** 100000",
-    "unknown(close)", "rank(per)", "ts_mean(close,-20)", "ts_delay(close,0)",
+    "unknown(close)", "rank(_invalid)", "ts_mean(close,-20)", "ts_delay(close,0)",
     "ts_mean(close,1.5)", "ts_mean(close,1001)", "rank(close,volume)",
     "rank(x=close)", "rank(industry)", "close / 0", "close + True", "rank(1e999)",
     "trade_when(volume>0,rank(close),1)", "trade_when(volume,rank(close),-1)",
@@ -125,7 +125,7 @@ async def test_unsupported_data_explains_why_instead_of_silently_substituting():
 
 
 async def test_invalid_draft_does_not_expose_ai_guidance_as_a_success():
-    result = await convert("덜 출렁이는 종목", draft("rank(unknown_data)"))
+    result = await convert("덜 출렁이는 종목", draft("rank(invalid.field)"))
     assert result.status == "REJECTED"
     assert result.strategyExplanation is None
     assert result.improvementSuggestions == []
@@ -144,9 +144,9 @@ async def test_one_day_return_may_use_the_daily_return_field():
 
 
 @pytest.mark.parametrize(
-    "strategy", ["PER이 낮으면 좋아", "뉴스 감성이 좋은 주식", "매수 후 5일 보유"]
+    "strategy", ["매수 후 5일 보유", "매수 후 손절", "익절 주문을 실행"]
 )
-async def test_confident_draft_cannot_drop_unavailable_data_or_execution_rules(strategy):
+async def test_confident_draft_cannot_drop_execution_rules(strategy):
     result = await convert(strategy, draft("rank(ts_mean(returns,5))"))
     assert result.status == "REJECTED"
 

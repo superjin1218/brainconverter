@@ -91,8 +91,7 @@ def source_guards(strategy: str, ir: StrategyIR) -> list[str]:
             errors.append(f"'{token}'은 '{expected}'로 보존되어야 합니다.")
 
     if re.search(
-        r"(?<![a-z])(per|pbr|roe|eps|fundamental|news|sentiment)(?![a-z])|"
-        r"재무|순이익|매출|뉴스|감성|동일\s*비중|같은\s*비중|가중\s*합|"
+        r"동일\s*비중|같은\s*비중|가중\s*합|"
         r"손절|익절|청산|이동평균.*교차|미래|내일|equal.weight|stop.loss|take.profit",
         lower,
     ):

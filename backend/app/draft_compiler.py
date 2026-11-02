@@ -10,6 +10,7 @@ from decimal import Decimal
 from typing import Literal
 
 from .compiler import validate_source_numbers
+from .data_fields import is_data_field
 from .models import DraftIR
 
 FIELDS = {
@@ -86,9 +87,9 @@ class DraftCompiler:
         if depth > 16:
             raise ValueError("전략 식의 중첩이 너무 깊습니다.")
         if isinstance(node, ast.Name):
-            if node.id in FIELDS:
+            if is_data_field(node.id):
                 self.fields.add(node.id)
-                return CompiledNode(node.id, FIELDS[node.id], "series")
+                return CompiledNode(node.id, FIELDS.get(node.id, node.id), "series")
             if node.id in GROUPS:
                 return CompiledNode(node.id, GROUPS[node.id], "group")
         if isinstance(node, ast.Constant) and type(node.value) in {int, float}:
@@ -184,12 +185,10 @@ def draft_source_errors(strategy: str, compiler: DraftCompiler, expression: str)
     """Check objective source constraints, without guessing the hypothesis with regex."""
     errors = validate_source_numbers(strategy, expression)
     if re.search(
-        r"(?<![a-z])(?:per|pbr|roe|eps|fundamentals?|news|sentiment)(?![a-z])|"
-        r"재무|순이익|매출|뉴스|감성|"
         r"손절|익절|청산|보유\s*기간|\d+\s*일(?:간)?\s*보유|hold\s+for|stop.loss|take.profit",
         strategy, re.I,
     ):
-        errors.append("요청에 현재 사용할 수 없는 데이터 또는 보유·청산 규칙이 포함돼 있습니다.")
+        errors.append("요청에 현재 지원하지 않는 보유·청산 규칙이 포함돼 있습니다.")
     for pattern, field in ((r"거래량|\bvolume\b", "volume"), (r"종가|\bclose\b", "close")):
         if re.search(pattern, strategy, re.I) and field not in compiler.fields:
             errors.append(f"명시한 {FIELDS[field]} 데이터가 코드에서 사라졌습니다.")
@@ -248,6 +247,12 @@ def compile_draft(strategy: str, ir: DraftIR, settings: dict) -> tuple[str | Non
     assumptions.append(
         "AI가 선택한 측정 방법은 가설을 시험하기 위한 초안이며 성과를 확인하지 않았습니다."
     )
+    model_fields = sorted(compiler.fields - FIELDS.keys())
+    if model_fields:
+        assumptions.append(
+            "AI가 선택한 데이터 필드 " + ", ".join(model_fields)
+            + ": BRAIN에서 제공 여부·자료형·사용 권한을 확인해야 합니다."
+        )
     return result.code, [], {
         "strategyExplanation": f"{ir.hypothesis}\n코드의 계산: {result.meaning}. "
         "이 값을 종목별 점수로 사용합니다. "

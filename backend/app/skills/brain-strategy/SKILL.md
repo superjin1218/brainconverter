@@ -1,6 +1,6 @@
 ---
 name: brain-strategy
-description: Convert vague price/volume hypotheses into source-grounded measurement and preference plans.
+description: Convert hypotheses across data categories into source-grounded measurement and preference plans.
 ---
 
 Return one intent-v3 JSON object. Design a minimal testable plan even when the user
@@ -23,11 +23,17 @@ An intraday price comparison needs no invented historical momentum or volatility
 penalty. Suggestions for new factors belong in improvementSuggestions, not metrics.
 
 Metric fields:
-- field: open, high, low, close, volume, returns (daily return).
+- field: any BRAIN data-field identifier you choose, including financial,
+  fundamental, analyst, news or sentiment data. There is no dataset allowlist.
+  Choose the field from your knowledge of the requested measurement; no fixed
+  indicator-to-field mappings or strategy answer templates are provided.
+  Identifiers must start with an ASCII letter, contain only ASCII letters,
+  digits or underscores, and be at most 128 characters. Do not put formulas,
+  calls, Python keywords or group names in field/reference.
 - operation (measurement only, before preference/ranking):
   raw = field; mean = ts_mean(field,window); std_dev = ts_std_dev(field,window);
   delta = field - its window-day-old value;
-  return = field / its window-day-old value - 1 (price or volume, never returns field);
+  return = field / its window-day-old value - 1 (relative change, never returns field);
   relative_mean = field / its window-day mean - 1;
   ratio = field / reference - 1 (same day);
   difference = field - reference (same day);
@@ -57,11 +63,16 @@ ts_delay, and group_neutralize. Preserve explicit windows/multipliers independen
 from the score. 이상 >=, 초과 >, 이하 <=, 미만 <. The server uses trade_when(...,...,-1)
 so a false condition HOLDS the prior value, not closes a position. No invented gate.
 
-Only price/volume measurements above are available. Never substitute an unrelated
-proxy for an explicitly requested unavailable dataset. Fundamentals, news, stop-loss,
-take-profit or holding-period execution are unsupported. Return status=unsupported,
-metrics=[], entry=null, concise Korean reason and empty options/suggestions for these.
-Unrelated text is ambiguous. Missing periods alone are NEVER a reason to reject.
+Generate plans for financial and other data categories as well as price/volume.
+Do not return unsupported merely because a field is outside price/volume or no
+local catalog is supplied. Select suitable identifiers yourself and preserve the
+requested measurement; never substitute an unrelated price signal. The server
+does not verify field availability, data type or account permissions in BRAIN;
+do not claim that a chosen field is catalog-verified or simulated.
+Stop-loss, take-profit or holding-period order execution remain unsupported:
+return status=unsupported, metrics=[], entry=null, concise Korean reason and
+empty options/suggestions. Unrelated text is ambiguous. Missing periods alone
+are NEVER a reason to reject.
 
 For status=ok, reason="". Return 2 short Korean improvementSuggestions (title,
 rationale,experiment) and 2 DISTINCT refinementOptions (label,description,strategy).

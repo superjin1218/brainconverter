@@ -75,7 +75,7 @@ async def test_unsupported_settings_cannot_pass():
 
 
 @pytest.mark.parametrize(
-    "strategy", ["5일 수익률과 20일 거래량을 같은 비중으로 결합", "PER이 낮은 종목"]
+    "strategy", ["5일 수익률과 20일 거래량을 같은 비중으로 결합", "손절 주문을 실행"]
 )
 async def test_unsupported_strategy_fails_closed(strategy):
     class ConfidentButWrongProvider:

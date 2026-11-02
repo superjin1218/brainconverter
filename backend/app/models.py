@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .data_fields import DATA_FIELD_PATTERN, validate_data_field
+
+DataField = Annotated[
+    str, Field(min_length=1, max_length=128, pattern=DATA_FIELD_PATTERN),
+    AfterValidator(validate_data_field),
+]
 
 
 class StrictModel(BaseModel):
@@ -10,7 +17,7 @@ class StrictModel(BaseModel):
 
 
 class SignalIR(StrictModel):
-    field: Literal["open", "high", "low", "close", "volume", "returns"]
+    field: DataField
     operation: Literal["delta", "raw", "return"]
     window: int = Field(ge=1, le=1000)
     direction: Literal["up", "down", "none"]
@@ -19,7 +26,7 @@ class SignalIR(StrictModel):
 
 class EntryIR(StrictModel):
     enabled: bool
-    field: Literal["open", "high", "low", "close", "volume", "returns"]
+    field: DataField
     reference: Literal["ts_mean", "none"]
     window: int = Field(ge=1, le=1000)
     comparator: Literal[">", ">=", "<", "<=", "none"]
@@ -111,9 +118,6 @@ class DraftIR(StrictModel):
     improvementSuggestions: list[ImprovementSuggestion] = Field(max_length=3)
     refinementOptions: list[RefinementOption] = Field(max_length=3)
     reason: str = Field(max_length=300)
-
-
-DataField = Literal["open", "high", "low", "close", "volume", "returns"]
 
 
 class IntentMetric(StrictModel):

@@ -228,7 +228,6 @@ async def test_refinements_round_trip_and_preserve_filter_and_settings(strategy)
 @pytest.mark.parametrize(
     "strategy",
     [
-        "1달 모멘텀에 PER 낮은 조건 추가",
         "일주일 반전 후 3% 손절",
         "1달 모멘텀 상위 10개만",
         "1달 모멘텀과 반전 전략",

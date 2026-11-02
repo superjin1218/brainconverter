@@ -30,6 +30,7 @@ def diagnostic_runtime() -> dict:
             "provider_types.py",
             "provider_errors.py",
             "models.py",
+            "data_fields.py",
             "hypotheses.py",
             "compiler.py",
             "draft_compiler.py",
