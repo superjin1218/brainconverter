@@ -35,7 +35,7 @@ def plan(metrics):
     return ir
 
 
-async def convert(strategy, ir):
+async def convert(strategy, ir, *, catalog=None):
     calls = []
 
     def handler(request):
@@ -49,7 +49,9 @@ async def convert(strategy, ir):
         return httpx.Response(200, json=reply(content=ir.model_dump_json()))
 
     provider = OpenAIProvider(httpx.MockTransport(handler), api_key=FAKE_KEY)
-    result = await HarnessService(provider).convert(ConvertRequest(strategy=strategy))
+    result = await HarnessService(provider, catalog=catalog).convert(
+        ConvertRequest(strategy=strategy)
+    )
     assert len(calls) == 1
     return result
 
@@ -71,7 +73,7 @@ async def test_intraday_recovery_does_not_acquire_unrequested_momentum_or_penalt
     ir = plan([metric(INTRADAY, operation="ratio", reference="open", window=1)])
     result = await convert(INTRADAY, ir)
     assert result.status == "PASS", result.warnings
-    assert result.fastExpression == "rank(((close / open) - 1))"
+    assert result.fastExpression == "rank((close / open))"
     assert "ts_" not in result.fastExpression
     assert result.validation.intentPlanChecked is True
 

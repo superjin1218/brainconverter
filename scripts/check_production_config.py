@@ -39,6 +39,10 @@ def validate() -> None:
         raise ValueError("Production requires the OpenAI provider")
     if config.conversions_enabled:
         OpenAIConnection.from_environment()
+        from backend.app.field_catalog import load_catalog
+        from backend.app.settings import DEFAULT_SIMULATION_SETTINGS
+
+        load_catalog().ensure_scope(DEFAULT_SIMULATION_SETTINGS)
     if not (config.static_directory / "index.html").is_file():
         raise ValueError("The static application is missing")
 

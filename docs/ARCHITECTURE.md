@@ -1,10 +1,10 @@
 # 현재 구조 (2026-09-29)
 
-브라우저 → Vercel FastAPI → Supabase 신원·승인 확인 → 작업/예산 예약 → OpenAI GPT 1회 → Python 검사·컴파일 → FASTEXPR + 12개 설정.
+브라우저 → Ubuntu FastAPI → Supabase 신원·승인 확인 → 카탈로그 구성 점검 → 작업/예산 예약 → GPT 영문 검색어 정리 → 임베딩 카탈로그 검색 → GPT 측정 계획 1회 → Python 검사·컴파일 → FASTEXPR + 12개 설정.
 
 ## 모델 정책과 연결
 
-`openai_policy.py`는 GPT-5.4 mini·`none`·일반/캐시 입력과 출력 단가를 관리합니다. 출력은 1,024토큰, 직렬화 요청은 16,000바이트로 제한합니다. 추론·출력 상한은 `frozen=True`, `init=False` 필드이며 요청·환경변수로 올릴 수 없습니다.
+`openai_policy.py`는 GPT-5.4 mini·`none`·일반/캐시 입력과 출력 단가를 관리합니다. 계획 생성 출력은 최대 1,024토큰, 직렬화 요청은 16,000바이트로 제한합니다. 검색어 정리(최대 128토큰)·임베딩·계획 생성의 비용 합계를 기존 34원 예약 안에 두며, 후보 수와 생성 출력 한도를 남은 예산에 맞춥니다. 추론·출력 상한은 `frozen=True`, `init=False` 필드이며 요청·환경변수로 올릴 수 없습니다.
 
 `provider_config.py`는 OpenAI 키와 고정 엔드포인트를 결정합니다. `OPENAI_API_KEY`만 읽습니다. 타임아웃은 최대 35초입니다. 모델이 고정 정책과 다르면 호출 전에 차단합니다.
 
@@ -41,3 +41,5 @@ DB는 전역 잠금으로 승인·쿼터·실행 슬롯을 원자적으로 확�
 API 요청·세션·대기 상태는 `api.js`, 모델 연결 상태는 `provider.js`, 회원/운영자 화면은 `membership.js`가 소유합니다. 대시보드는 메서드를 통해 상태를 변경합니다. 현재 서버가 제공하지 않는 이전 `/api/admin/usage` 패널은 제거했습니다.
 
 현재 배포 경로는 `app.py`와 `vercel.json`이며 `scripts/deploy_openai.py`가 검증·환경변수 등록·배포 후 확인을 묶습니다. [OpenAI 배포 준비](OPENAI_DEPLOYMENT.md)를 따릅니다. Cloudflare Worker·Cloud Run 배포 스크립트·HMAC 인증과 해당 CI는 제거했으며 Git 이력에서 확인할 수 있습니다. 실제 호출 경로는 OpenAI뿐입니다.
+
+`field_catalog.py`는 계정·시장·Universe·Delay에 맞는 실제 ID·자료형과 벡터 색인을 읽고 동적 후보를 검색합니다. `catalog_context.py`는 요청별 후보를 스키마·Pydantic·컴파일러에 동일하게 적용합니다. VECTOR는 `vec_avg` 후 MATRIX 연산을 사용합니다. 짧은 입력의 근거는 원문의 독립 절에서만 선택하며, 전체 입력은 원문 위치와 중복을 계속 검사합니다. 갱신·배포는 [카탈로그 운영](BRAIN_FIELD_CATALOG.md)을 따릅니다.

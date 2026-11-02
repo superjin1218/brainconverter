@@ -98,7 +98,11 @@ async def test_success_interprets_once_and_preserves_expression_settings_and_usa
     assert len(result.simulationSettings) == 12
     assert result.confidence is None
     assert "consensusPassed" not in result.validation.model_dump()
-    assert result.usage == {"inputTokens": 900, "outputTokens": 180, "costMicrousd": 1485}
+    assert result.usage == {
+        "inputTokens": 900, "outputTokens": 180, "costMicrousd": 1485,
+        "embeddingInputTokens": 0,
+        "searchInputTokens": 0, "searchOutputTokens": 0,
+    }
 
 
 async def test_twenty_simultaneous_interpretations_call_once_and_overflow_never_calls(monkeypatch):

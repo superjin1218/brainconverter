@@ -1,6 +1,6 @@
 # 로컬 실행과 GPT 연결
 
-현재 코드는 OpenAI GPT-5.4 mini 전용입니다. 모델·추론 `none`·출력 1,024토큰 제한은 `backend/app/openai_policy.py`에서 고정합니다.
+현재 코드는 OpenAI GPT-5.4 mini 전용입니다. 모델·추론 `none`·계획 출력 최대 1,024토큰 제한은 `backend/app/openai_policy.py`에서 고정합니다.
 
 ## 회원 화면 개발
 
@@ -40,3 +40,5 @@ make test-sql
 마지막 명령은 오프라인 모의 평가입니다. 유료 평가에는 별도 `--live` 옵션이 필요합니다. [평가 안내](../evals/README.md)를 확인하세요.
 
 [OpenAI 배포 절차](OPENAI_DEPLOYMENT.md)에 따라 Vercel에 새 코드를 배포해야 운영에 적용됩니다. 로컬 키가 자동으로 운영에 복사되지는 않습니다. FASTEXPR·BRAIN 설정 생성 성공과 수익성·BRAIN Simulate 성공은 별도입니다.
+
+실제 AI 변환에는 [계정 필드 카탈로그](BRAIN_FIELD_CATALOG.md)가 필요합니다. 명시적인 mock 실행은 WQ·OpenAI를 호출하지 않습니다. 실제 경로는 검색어 정리·임베딩·계획 생성을 합쳐 34원 예약 상한 안에서 실행합니다.

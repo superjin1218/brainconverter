@@ -7,6 +7,7 @@ import logging
 
 import httpx
 
+from .catalog_context import CURRENT_CATALOG
 from .models import IntentIR
 from .provider_errors import ProviderError, http_provider_error
 from .provider_types import ProviderResult
@@ -48,6 +49,9 @@ class ChatCompletionProvider:
             raise ValueError("invalid usage shape")
         inputs = outputs = 0
         cost = self.reserve_microusd
+        catalog = CURRENT_CATALOG.get()
+        if catalog is not None:
+            cost = min(cost, catalog.generation_budget_microusd)
         if "prompt_tokens" in usage and "completion_tokens" in usage:
             inputs, outputs = int(usage["prompt_tokens"]), int(usage["completion_tokens"])
             if inputs < 0 or outputs < 0:

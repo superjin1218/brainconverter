@@ -66,6 +66,10 @@ sudo bash deploy/install-systemd.sh
 
 새 환경에서 `.venv`가 없다면 먼저 `uv venv --python 3.12 .venv`를 실행한다. 기존 가상환경을 지우거나 다시 만들 필요는 없다. 설치 스크립트는 `/etc/systemd/system/brainconverter.service`에 root 소유 644로 설치한 뒤 daemon-reload, enable, start를 실행한다. 비밀 값은 유닛 파일에 쓰지 않는다.
 
+## 필드 카탈로그
+
+AI 변환을 시작하기 전에 [필드 카탈로그 운영 절차](BRAIN_FIELD_CATALOG.md)에 따라 계정 목록·자료형·연산자와 검색 색인을 준비한다. 기본 범위는 USA/TOP3000/Delay 1이다. 카탈로그가 없거나 범위가 다르면 변환을 시작하지 않는다. 갱신 후 서비스 재시작으로 캐시를 비운다.
+
 ## 코드 수정 후 재배포
 
 검토한 로컬 코드를 기준으로 진행한다. 자동 Git pull·Vercel 배포·SQL 실행은 포함하지 않는다.

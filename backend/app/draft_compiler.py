@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Literal
 
+from .catalog_context import CURRENT_CATALOG, render_field
 from .compiler import validate_source_numbers
 from .data_fields import is_data_field
 from .models import DraftIR
@@ -89,7 +90,11 @@ class DraftCompiler:
         if isinstance(node, ast.Name):
             if is_data_field(node.id):
                 self.fields.add(node.id)
-                return CompiledNode(node.id, FIELDS.get(node.id, node.id), "series")
+                code = render_field(node.id)
+                meaning = FIELDS.get(node.id, node.id)
+                if code != node.id:
+                    meaning += "의 벡터 원소 평균"
+                return CompiledNode(code, meaning, "series")
             if node.id in GROUPS:
                 return CompiledNode(node.id, GROUPS[node.id], "group")
         if isinstance(node, ast.Constant) and type(node.value) in {int, float}:
@@ -129,6 +134,18 @@ class DraftCompiler:
             )
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and not node.keywords:
             name = node.func.id
+            catalog = CURRENT_CATALOG.get()
+            if catalog is not None and name not in catalog.operators:
+                raise ValueError(f"현재 카탈로그에 없는 연산자입니다: {name}")
+            if name == "vec_avg":
+                if len(node.args) != 1 or not isinstance(node.args[0], ast.Name):
+                    raise ValueError("VECTOR 평균에는 원본 필드 하나가 필요합니다.")
+                field = node.args[0].id
+                metadata = catalog.fields.get(field) if catalog is not None else None
+                if metadata is None or metadata.type != "VECTOR":
+                    raise ValueError("VECTOR 필드에만 벡터 평균을 적용할 수 있습니다.")
+                self.fields.add(field)
+                return CompiledNode(f"vec_avg({field})", field + "의 벡터 원소 평균", "series")
             args = [self._node(arg, depth + 1) for arg in node.args]
             result = self._call(name, args)
             self.steps.append({"requirement": result.meaning, "expression": result.code})
@@ -247,11 +264,11 @@ def compile_draft(strategy: str, ir: DraftIR, settings: dict) -> tuple[str | Non
     assumptions.append(
         "AI가 선택한 측정 방법은 가설을 시험하기 위한 초안이며 성과를 확인하지 않았습니다."
     )
-    model_fields = sorted(compiler.fields - FIELDS.keys())
-    if model_fields:
+    catalog = CURRENT_CATALOG.get()
+    if catalog is not None:
         assumptions.append(
-            "AI가 선택한 데이터 필드 " + ", ".join(model_fields)
-            + ": BRAIN에서 제공 여부·자료형·사용 권한을 확인해야 합니다."
+            "선택한 필드는 제공된 BRAIN 카탈로그의 식별자·자료형으로 검사했습니다. "
+            "실제 시뮬레이션·투자 성과를 검증한 것은 아닙니다."
         )
     return result.code, [], {
         "strategyExplanation": f"{ir.hypothesis}\n코드의 계산: {result.meaning}. "

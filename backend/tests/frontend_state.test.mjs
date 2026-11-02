@@ -325,7 +325,7 @@ test("operator settings separate GPT token cost and reserve without making a con
   await ui.element("#open-settings").emit("click");
   assert.match(ui.element("#ai-budget-status").textContent, /예산 예약 · 34 \/ 20,000원/);
   assert.match(ui.element("#ai-budget-status").textContent, /예상 비용 \$0\.000954/);
-  assert.match(ui.element("#ai-budget-status").textContent, /호출 시도 1회/);
+  assert.match(ui.element("#ai-budget-status").textContent, /변환 시도 1회/);
   assert.match(ui.element("#ai-budget-status").textContent, /입력 828 · 출력 74토큰/);
   assert.equal(ui.control.calls.length, 0);
 });

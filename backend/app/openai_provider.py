@@ -1,4 +1,4 @@
-"""OpenAI direct API adapter with a fixed model and one request per conversion."""
+"""OpenAI direct API adapter with a fixed model and one intent-generation request."""
 
 from __future__ import annotations
 

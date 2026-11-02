@@ -27,7 +27,7 @@ def draft(expression):
     )
 
 
-async def convert(strategy, ir):
+async def convert(strategy, ir, *, catalog=None):
     calls = []
 
     class LegacyProvider:
@@ -39,7 +39,9 @@ async def convert(strategy, ir):
             return ProviderResult(ir=ir)
 
     provider = LegacyProvider()
-    result = await HarnessService(provider).convert(ConvertRequest(strategy=strategy))
+    result = await HarnessService(provider, catalog=catalog).convert(
+        ConvertRequest(strategy=strategy)
+    )
     assert len(calls) == 1
     return result
 

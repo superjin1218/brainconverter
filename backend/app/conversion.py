@@ -122,6 +122,8 @@ class ConversionCoordinator:
         owned_job = None
         try:
             service = self._service()
+            # Catalog configuration errors must not reserve a member job or AI budget.
+            service.validate_catalog(payload)
             expected = request.headers.get("x-expected-provider")
             if (
                 self._config.environment == "development"

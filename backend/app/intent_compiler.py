@@ -5,12 +5,14 @@ from __future__ import annotations
 import ast
 import re
 
+from .catalog_context import render_field
 from .draft_compiler import GROUPS, DraftCompiler, compile_draft, expression_signature
 from .models import DraftIR, IntentIR, IntentMetric
 
 
 def measurement(metric: IntentMetric) -> str:
-    field, days, other = metric.field, metric.window, metric.reference
+    field, days = render_field(metric.field), metric.window
+    other = render_field(metric.reference) if metric.reference is not None else None
     if metric.operation == "raw":
         return field
     if metric.operation == "return":
@@ -20,7 +22,9 @@ def measurement(metric: IntentMetric) -> str:
     if metric.operation == "relative_mean":
         return f"({field} / ts_mean({field}, {days}) - 1)"
     if metric.operation == "ratio":
-        return f"({field} / {other} - 1)"
+        # Ranking x/y and x/y-1 is identical. The offset can introduce a unit
+        # mismatch when BRAIN tags cross-dataset inputs differently.
+        return f"({field} / {other})"
     if metric.operation == "difference":
         return f"({field} - {other})"
     if metric.operation == "range_position":
@@ -44,6 +48,30 @@ def score_expression(metrics: list[IntentMetric]) -> str:
     return " + ".join(terms)
 
 
+def source_spans(strategy: str, quote: str) -> list[tuple[int, int]]:
+    exact = [match.span() for match in re.finditer(re.escape(quote), strategy)]
+    if exact:
+        return exact
+    # Models sometimes wrap an otherwise exact excerpt in presentation quotes.
+    pairs = {'"': '"', "'": "'", '“': '”', '‘': '’', '「': '」', '『': '』'}
+    if len(quote) >= 2 and pairs.get(quote[0]) == quote[-1]:
+        quote = quote[1:-1].strip()
+    if not quote:
+        return []
+
+    def compact(value):
+        positions = [i for i, char in enumerate(value)
+                     if not char.isspace() and char not in "()[]{}（）［］｛｝"]
+        return "".join(value[i] for i in positions), positions
+
+    needle, _ = compact(quote)
+    haystack, positions = compact(strategy)
+    if len(needle) < 2:
+        return []
+    return [(positions[match.start()], positions[match.end() - 1] + 1)
+            for match in re.finditer(re.escape(needle), haystack)]
+
+
 def source_evidence_errors(strategy: str, ir: IntentIR) -> list[str]:
     errors, used = [], []
     for component in [*ir.metrics, *([ir.entry] if ir.entry else [])]:
@@ -51,7 +79,7 @@ def source_evidence_errors(strategy: str, ir: IntentIR) -> list[str]:
         if len(quote) < 2:
             errors.append("측정값 또는 거래 조건의 근거 문구가 비어 있거나 너무 짧습니다.")
             continue
-        positions = [m.span() for m in re.finditer(re.escape(quote), strategy)]
+        positions = source_spans(strategy, quote)
         available = [p for p in positions if not any(p[0] < b and a < p[1] for a, b in used)]
         if not positions:
             errors.append("측정값 또는 거래 조건의 근거가 원문에 없습니다.")
@@ -64,6 +92,10 @@ def source_evidence_errors(strategy: str, ir: IntentIR) -> list[str]:
     ]
     if len(set(signatures)) != len(signatures):
         errors.append("같은 측정값을 중복 또는 상반된 방향으로 사용했습니다.")
+    for metric in ir.metrics:
+        if (metric.operation == "std_dev" and metric.field != "returns"
+                and re.search(r"일간\s*수익률|daily\s+returns?", metric.source, re.I)):
+            errors.append("명시한 일간 수익률 변동성이 다른 데이터의 변동성으로 바뀌었습니다.")
     if re.search(r"(?:같은|동일한?|동종)\s*(?:업종|산업)|industry.relative", strategy, re.I):
         if not any(m.group != "none" for m in ir.metrics):
             errors.append("명시한 동종업계 비교가 빠졌습니다.")

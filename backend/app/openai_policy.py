@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Literal
 
+from .catalog_context import CURRENT_CATALOG
 from .response_schema import strict_schema
 
 OPENAI_MODEL = "gpt-5.4-mini"
@@ -23,7 +24,9 @@ class OpenAIModelPolicy:
     max_request_bytes: int = field(default=16000, init=False)
     max_timeout_seconds: int = field(default=35, init=False)
     # Standard input $0.75/M, cached input $0.075/M, output $4.50/M.
-    # <=16KB serialized request and <=1024 output tokens: <=$0.016608.
+    # Catalog search planning, embeddings and generation share this aggregate bound.
+    # UTF-8 request bytes conservatively bound input tokens; each stage deducts its
+    # maximum cost before the next stage, never increasing the 34-KRW reserve.
     # Round the reserve up to $0.017; internal budget conversion is 2,000 KRW/USD.
     reserve_microusd: int = field(default=17000, init=False)
     budget_allowance_krw: int = field(default=34, init=False)
@@ -44,8 +47,16 @@ class OpenAIModelPolicy:
             "store": False,
             "service_tier": "default",
         }
-        if len(json.dumps(body, ensure_ascii=False).encode()) > self.max_request_bytes:
+        size = len(json.dumps(body, ensure_ascii=False).encode())
+        if size > self.max_request_bytes:
             raise RuntimeError("모델 입력 크기 한도를 초과했습니다.")
+        catalog = CURRENT_CATALOG.get()
+        if catalog is not None:
+            remaining = catalog.generation_budget_microusd - self.estimate_cost(size, 0)
+            cap = min(self.max_completion_tokens, remaining * 1_000_000 // OUTPUT_PRICE_MICROUSD)
+            if cap < 256:
+                raise RuntimeError("필드 검색을 포함한 모델 비용 한도를 초과했습니다.")
+            body["max_completion_tokens"] = cap
         return body
 
     def estimate_cost(self, inputs: int, outputs: int, cached: int = 0) -> int:

@@ -31,8 +31,8 @@ export class HarnessApi {
       },
       body,
     };
-    const deadline = Date.now() + 10 * 60000 + 65000;
-    let response = await this.request(this.endpoint, {...options, signal: AbortSignal.timeout(65000)});
+    const deadline = Date.now() + 10 * 60000 + 90000;
+    let response = await this.request(this.endpoint, {...options, signal: AbortSignal.timeout(90000)});
     this.assertSession(generation);
     while (response.status === 202) {
       const progress = await this.read(response);
@@ -46,7 +46,7 @@ export class HarnessApi {
       // Only queued jobs attempt an atomic claim. Running jobs are read-only polls.
       // Reuse the ID/body so admission and quota are never duplicated.
       response = progress.status === "queued"
-        ? await this.request(this.endpoint, {...options, signal: AbortSignal.timeout(65000)})
+        ? await this.request(this.endpoint, {...options, signal: AbortSignal.timeout(90000)})
         : await this.request(`/api/jobs/${requestId}`, {signal: AbortSignal.timeout(10000)});
       this.assertSession(generation);
     }

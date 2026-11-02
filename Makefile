@@ -24,7 +24,7 @@ test-frontend:
 	node --test backend/tests/*.test.mjs
 
 lint:
-	.venv/bin/ruff check backend scripts/deploy_openai.py scripts/check_production_config.py scripts/verify_production.py
+	.venv/bin/ruff check backend scripts/deploy_openai.py scripts/check_production_config.py scripts/verify_production.py scripts/refresh_brain_catalog.py
 
 docker-build:
 	docker build -t brain-alpha-harness:local .

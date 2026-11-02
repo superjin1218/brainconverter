@@ -13,14 +13,16 @@ from backend.tests.test_intent_alignment import convert, metric, plan
 
 
 @pytest.mark.parametrize("field", ["model_profitability_a", "model_profitability_b"])
-async def test_same_financial_request_preserves_whichever_field_the_model_selects(field):
+async def test_same_financial_request_preserves_whichever_field_the_model_selects(
+    field, synthetic_catalog,
+):
     strategy = "ROE가 높은 기업을 선호한다"
     ir = plan([metric(strategy, operation="raw", field=field, window=1)])
-    result = await convert(strategy, ir)
+    result = await convert(strategy, ir, catalog=synthetic_catalog)
     assert result.status == "PASS", result.warnings
     assert result.fastExpression == f"rank({field})"
     assert field in result.strategyExplanation
-    assert any(field in assumption and "BRAIN" in assumption for assumption in result.assumptions)
+    assert any("BRAIN 카탈로그" in assumption for assumption in result.assumptions)
 
 
 @pytest.mark.parametrize("operation,window,reference", [
@@ -29,25 +31,25 @@ async def test_same_financial_request_preserves_whichever_field_the_model_select
     ("correlation", 21, "model_equity_field"),
 ])
 async def test_model_selected_fields_work_through_measurements_and_reference(
-    operation, window, reference,
+    operation, window, reference, synthetic_catalog,
 ):
     strategy = "재무 지표가 높은 회사를 선호한다"
     ir = plan([metric(strategy, operation=operation, field="model_income_field",
                       reference=reference, window=window)])
-    result = await convert(strategy, ir)
+    result = await convert(strategy, ir, catalog=synthetic_catalog)
     assert result.status == "PASS", result.warnings
     assert "model_income_field" in result.fastExpression
     if reference:
         assert reference in result.fastExpression
 
 
-async def test_entry_and_preference_can_use_independent_new_data_fields():
+async def test_entry_and_preference_can_use_independent_new_data_fields(synthetic_catalog):
     strategy = "재무 점수가 높은 회사. 다른 지표가 양수일 때만 거래"
     ir = plan([metric("재무 점수가 높은 회사", operation="raw",
                       field="model_score_field", window=1)])
     ir.entry = IntentEntry(source="다른 지표가 양수일 때만 거래",
                            condition="model_gate_field > 0")
-    result = await convert(strategy, ir)
+    result = await convert(strategy, ir, catalog=synthetic_catalog)
     assert result.status == "PASS", result.warnings
     assert result.fastExpression == (
         "trade_when(model_gate_field > 0, rank(model_score_field), -1)"
@@ -57,8 +59,10 @@ async def test_entry_and_preference_can_use_independent_new_data_fields():
 @pytest.mark.parametrize("strategy", [
     "ROE가 높은 기업", "PER이 낮은 종목", "뉴스 감성이 좋은 주식", "재무 성장 지표가 높은 기업",
 ])
-async def test_draft_has_no_dataset_category_blacklist(strategy):
-    result = await convert_draft(strategy, draft("rank(model_selected_field)"))
+async def test_draft_has_no_dataset_category_blacklist(strategy, synthetic_catalog):
+    result = await convert_draft(
+        strategy, draft("rank(model_selected_field)"), catalog=synthetic_catalog
+    )
     assert result.status == "PASS", result.warnings
     assert result.fastExpression == "rank(model_selected_field)"
 
