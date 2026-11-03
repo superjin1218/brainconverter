@@ -33,6 +33,9 @@ def strict_schema() -> dict:
 
     def visit(value):
         if isinstance(value, dict):
+            value.pop("default", None)
+            if value.get("type") == "object" and "properties" in value:
+                value["required"] = list(value["properties"])
             # Pydantic enforces bounds locally; keep the wire schema portable.
             if isinstance(value.get("title"), str):
                 value.pop("title")

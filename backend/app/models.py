@@ -124,17 +124,23 @@ class IntentMetric(StrictModel):
     source: str = Field(min_length=2, max_length=300)
     operation: Literal[
         "raw", "return", "delta", "mean", "std_dev", "relative_mean",
-        "ratio", "difference", "range_position", "correlation",
+        "ratio", "difference", "range_position", "correlation", "expression",
     ]
     field: DataField
     window: int = Field(ge=1, le=1000)
     reference: DataField | None
+    formula: str | None = Field(default=None, min_length=1, max_length=500)
     preference: Literal["higher", "lower"]
     group: Literal["none", "industry", "sector", "subindustry"]
     weight: float = Field(gt=0, le=10)
 
     @model_validator(mode="after")
     def consistent_measurement(self):
+        if self.operation == "expression":
+            if not self.formula or self.window != 1 or self.reference is not None:
+                raise ValueError("복합식에는 formula, window=1, reference=null이 필요합니다.")
+        elif self.formula is not None:
+            raise ValueError("formula는 복합 측정식에서만 사용합니다.")
         paired = self.operation in {"ratio", "difference", "correlation"}
         if paired != (self.reference is not None):
             raise ValueError("측정 방법에 맞는 비교 데이터가 필요합니다.")
