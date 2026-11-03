@@ -32,6 +32,10 @@ Metric: field=main exact catalog ID; aggregation=none for MATRIX, avg or sum for
 VECTOR. reference is an exact second ID only for ratio/difference/correlation,
 otherwise null; referenceAggregation follows the same type rule. VECTOR must be
 aggregated BEFORE any numeric/time-series/rank operation.
+Catalog IDs are provided inputs, not arbitrary indicator abbreviations. Use a
+precomputed indicator only if its description matches the requested measurement.
+Otherwise calculate it from actual input fields with operation=expression;
+never invent a raw field such as a financial acronym to stand for that formula.
 operation: raw; return=current/delayed-1; delta; mean; std_dev; relative_mean=
 current/mean-1; ratio=current/reference-1; difference=current-reference;
 range_position=(field-low)/(high-low); correlation. window=1..1000 and MUST be 1 for
@@ -44,6 +48,10 @@ window=1, both aggregations=none. Otherwise formula=null. Formula may use catalo
 fields, numeric literals, + - * /, abs, ts_delay, ts_delta, ts_mean, ts_sum,
 ts_std_dev, ts_min, ts_max, ts_rank, ts_corr, ts_backfill, vec_avg, vec_sum.
 No rank/group/trade_when/if_else inside formula; the server builds the final score.
+Formula may declare local variables as name=calculation; followed by a final
+output expression. A local name must be declared before use and must not shadow
+a catalog field or function. These names are not field/reference IDs. The server
+renders composite calculations as declared variables followed by the final score.
 Quarterly/annual reporting periods are not trading-day lags: do not silently
 replace fiscal comparisons with 63/252-day comparisons. Use an appropriate reported
 metric from the catalog or explain that this exact measurement is unavailable.

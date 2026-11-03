@@ -79,7 +79,8 @@ async def test_compound_financial_measurement_preserves_arithmetic_and_preferenc
     assert result.status == "PASS", result.warnings
     assert "fnd6_mfma1_at" in result.fastExpression
     assert "operating_cashflow_reported_value - fnd6_newa2v1300_ni" in result.fastExpression
-    assert result.fastExpression.startswith("rank(")
+    assert result.fastExpression.startswith("calc_1 = ")
+    assert result.fastExpression.endswith("rank(calc_1)")
 
 
 async def test_live_failure_cannot_split_one_arithmetic_measurement_into_two_scores():

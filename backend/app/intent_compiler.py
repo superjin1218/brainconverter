@@ -60,7 +60,7 @@ def measurement(metric: IntentMetric) -> str:
             raise ValueError("복합 측정식에 선언한 주 데이터 필드가 없습니다.")
         if compiler.operators & {"rank", "group_rank", "group_neutralize", "trade_when", "if_else"}:
             raise ValueError("복합 측정식 안에 점수 순위·조건부 점수를 숨길 수 없습니다.")
-        return result.code
+        return result.expanded_code or result.code
     field = _field_value(metric.field, metric.aggregation)
     days = metric.window
     other = (_field_value(metric.reference, metric.referenceAggregation)
@@ -98,6 +98,33 @@ def score_expression(metrics: list[IntentMetric]) -> str:
     return " + ".join(terms)
 
 
+def declare_measurements(expression: str, metrics: list[IntentMetric]) -> str:
+    """Give composite calculations explicit BRAIN bindings before referencing them."""
+    definitions, replacements = [], {}
+    catalog = get_catalog()
+    for index, metric in enumerate(metrics, 1):
+        if metric.operation != "expression":
+            continue
+        name = f"calc_{index}"
+        while name in catalog.fields or name in catalog.operators:
+            name += "_value"
+        value = measurement(metric)
+        replacements[expression_signature(ast.parse(value, mode="eval").body)] = name
+        definitions.append(f"{name} = {value};")
+    if not definitions:
+        return expression
+
+    class BindMeasurement(ast.NodeTransformer):
+        def visit(self, node):
+            name = replacements.get(expression_signature(node))
+            if name is not None:
+                return ast.Name(id=name, ctx=ast.Load())
+            return super().visit(node)
+
+    tree = BindMeasurement().visit(ast.parse(expression, mode="eval"))
+    return "\n".join([*definitions, ast.unparse(tree.body)])
+
+
 def source_evidence_errors(strategy: str, ir: IntentIR) -> list[str]:
     errors, used = [], []
     for component in [*ir.metrics, *([ir.entry] if ir.entry else [])]:
@@ -114,7 +141,8 @@ def source_evidence_errors(strategy: str, ir: IntentIR) -> list[str]:
         else:
             used.append(available[0])
     signatures = [
-        (m.operation, m.field, m.window, m.reference, m.group) for m in ir.metrics
+        (expression_signature(ast.parse(measurement(m), mode="eval").body), m.group)
+        for m in ir.metrics
     ]
     if len(set(signatures)) != len(signatures):
         errors.append("같은 측정값을 중복 또는 상반된 방향으로 사용했습니다.")
@@ -231,10 +259,12 @@ def compile_intent(strategy: str, ir: IntentIR, settings: dict):
             condition = DraftCompiler().compile(ir.entry.condition, expected_kind="condition")
         except ValueError as exc:
             return None, [str(exc)], {}
-        expression = f"trade_when({condition.code}, ({score}), -1)"
+        condition_code = condition.expanded_code or condition.code
+        expression = f"trade_when({condition_code}, ({score}), -1)"
     else:
         expression = score
     # Reuse the typed expression boundary and explicit source-condition checks.
+    expression = declare_measurements(expression, ir.metrics)
     render_ir = DraftIR(
         schemaVersion="draft-v2", status="ok", hypothesis="입력에 근거한 전략 초안입니다.",
         expression=expression, assumptions=assumptions,
@@ -242,6 +272,15 @@ def compile_intent(strategy: str, ir: IntentIR, settings: dict):
         reason="",
     )
     code, errors, guidance = compile_draft(strategy, render_ir, settings)
+    if code is not None and not errors:
+        compiler = DraftCompiler()
+        compiler.compile(code)
+        output = compiler.tree.body
+        if isinstance(output, ast.Call) and output.func.id == "trade_when":
+            output = output.args[1]
+        errors = preference_behavior_errors(ast.unparse(output), ir.metrics)
+        if errors:
+            return None, errors, {}
     if not errors:
         guidance["strategyExplanation"] = (
             "\n".join(explanation) + "\n" + guidance["strategyExplanation"]

@@ -1,8 +1,9 @@
-"""Compile an AI-designed expression through a small, typed allowlist. Never eval it."""
+"""Parse typed FASTEXPR expressions and declared variables. Never exec or eval them."""
 
 from __future__ import annotations
 
 import ast
+import copy
 import math
 import re
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from typing import Literal
 
 from .brain_catalog import BrainCatalog, get_catalog
 from .compiler import validate_source_numbers
+from .data_fields import is_data_field
 from .models import DraftIR
 
 FIELDS = {
@@ -32,7 +34,8 @@ COMPARISONS = {ast.Gt: ">", ast.GtE: ">=", ast.Lt: "<", ast.LtE: "<="}
 class CompiledNode:
     code: str
     meaning: str
-    kind: str  # number, series, condition or group
+    kind: str  # number, series, vector, condition or group
+    expanded_code: str | None = None
 
 
 def _numeric(node: CompiledNode) -> bool:
@@ -72,6 +75,11 @@ class DraftCompiler:
     def compile(
         self, expression: str, *, expected_kind: Literal["series", "condition"] = "series"
     ) -> CompiledNode:
+        if ";" in expression or re.match(r"\s*[A-Za-z][A-Za-z0-9_]*\s*=(?!=)", expression):
+            return self._program(expression, expected_kind)
+        return self._expression(expression, expected_kind)
+
+    def _expression(self, expression: str, expected_kind: str | None) -> CompiledNode:
         try:
             self.tree = ast.parse(expression.strip(), mode="eval")
             if sum(1 for _ in ast.walk(self.tree)) > 180:
@@ -79,12 +87,77 @@ class DraftCompiler:
             result = self._node(self.tree.body, 0)
         except (SyntaxError, RecursionError) as exc:
             raise ValueError("전략 식의 구문을 해석할 수 없습니다.") from exc
-        if result.kind != expected_kind:
+        if expected_kind is not None and result.kind != expected_kind:
             raise ValueError(
                 "거래 조건에는 비교식이 필요합니다." if expected_kind == "condition"
                 else "종목별 점수를 계산하는 식이 필요합니다."
             )
         return result
+
+    def _program(self, source: str, expected_kind: str) -> CompiledNode:
+        """BRAIN assignments end with ';'; the last statement is the output.
+
+        Substitute validated local bindings only in the analysis AST. The emitted
+        BRAIN program keeps declarations, so a derived name is never undefined.
+        This is parsing/type checking, never Python exec/eval.
+        """
+        parts = source.strip().split(";")
+        if not parts[-1].strip():
+            parts.pop()
+        if not parts or len(parts) > 25 or any(not part.strip() for part in parts):
+            raise ValueError("BRAIN 변수 선언 또는 마지막 출력식이 올바르지 않습니다.")
+        bindings, dependencies, definitions = {}, {}, []
+
+        def expand(text):
+            try:
+                tree = ast.parse(text.strip(), mode="eval")
+            except SyntaxError as exc:
+                raise ValueError("BRAIN 변수 계산식의 구문이 올바르지 않습니다.") from exc
+            references = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+            used = references & bindings.keys()
+            if sum(1 for _ in ast.walk(tree)) > 180:
+                raise ValueError("전략 식이 너무 복잡합니다.")
+
+            class Substitute(ast.NodeTransformer):
+                def visit_Name(self, node):
+                    return copy.deepcopy(bindings[node.id]) if node.id in bindings else node
+
+            expanded = Substitute().visit(copy.deepcopy(tree))
+            if sum(1 for _ in ast.walk(expanded)) > 180:
+                raise ValueError("변수를 전개한 전략 식이 너무 복잡합니다.")
+            return tree, expanded, used
+
+        for statement in parts[:-1]:
+            assignment = re.fullmatch(
+                r"\s*([A-Za-z][A-Za-z0-9_]*)\s*=(?!=)\s*(.+)\s*", statement, re.S,
+            )
+            if assignment is None:
+                raise ValueError("중간 계산은 '변수 = 계산식;' 형태로 선언해야 합니다.")
+            name, rhs = assignment.groups()
+            if (not is_data_field(name) or name in bindings
+                    or name in self.catalog.fields or name in self.catalog.operators):
+                raise ValueError(f"변수 이름이 중복되거나 BRAIN 필드·함수와 충돌합니다: {name}")
+            _, expanded, used = expand(rhs)
+            value = self._expression(ast.unparse(expanded), None)
+            bindings[name] = expanded.body
+            dependencies[name] = used
+            definitions.append(f"{name} = {value.code};")
+        final, expanded, used = expand(parts[-1])
+        pending = list(used)
+        while pending:
+            for dependency in dependencies[pending.pop()]:
+                if dependency not in used:
+                    used.add(dependency)
+                    pending.append(dependency)
+        if used != bindings.keys():
+            raise ValueError("출력에 사용하지 않는 변수 선언이 있습니다.")
+        # Requirements must be present in the output, not in an unused declaration.
+        self.fields.clear()
+        self.operators.clear()
+        self.windows.clear()
+        value = self._expression(ast.unparse(expanded), expected_kind)
+        code = "\n".join([*definitions, ast.unparse(final.body)]) if definitions else value.code
+        return CompiledNode(code, value.meaning, value.kind, expanded_code=value.code)
 
     def _node(self, node: ast.AST, depth: int) -> CompiledNode:
         if depth > 16:
